@@ -1,0 +1,43 @@
+{
+  "name": "travel-route-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@hello-pangea/dnd": "^17.0.0",
+    "@prisma/client": "^5.10.0",
+    "@turf/turf": "^6.5.0",
+    "@types/three": "^0.182.0",
+    "clsx": "^2.1.0",
+    "dotenv": "^17.2.3",
+    "lucide-react": "^0.344.0",
+    "mapbox-gl": "^3.17.0",
+    "maplibre-gl": "^4.0.0",
+    "next": "14.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^2.2.0",
+    "three": "^0.182.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/dom-mediacapture-record": "^1.0.19",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "prisma": "^5.10.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0"
+  }
+}

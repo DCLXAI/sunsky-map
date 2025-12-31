@@ -1,0 +1,8 @@
+# Database
+prisma/dev.db
+*.db
+node_modules
+.next
+.env*
+.vercel
+.env*.local

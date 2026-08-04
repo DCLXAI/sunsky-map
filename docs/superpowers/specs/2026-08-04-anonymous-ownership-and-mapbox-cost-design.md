@@ -82,9 +82,15 @@ so 404 hides existence as well as content.
 
 ### Existing data
 
-The database was created today and holds one ownerless `New Trip` row left over from
-deployment testing. That row is deleted, then `ownerId` is added as `NOT NULL`. No backfill
-strategy is needed because there is no real data to preserve.
+The database was created today and holds a single `New Trip` row carrying only the default
+Seoul→Tokyo waypoints. It was first assumed to be deployment test data, but its provenance
+could not be established — it may be the site owner's own click-through — so **nothing is
+deleted.**
+
+`ownerId` is added with a temporary `DEFAULT ''`, which backfills the existing row, and the
+default is then dropped so new rows must supply an owner. Owner ids are always 64 hex
+characters, so `''` matches no visitor: the row becomes unreachable without being
+destroyed, and stays recoverable if its owner is ever identified.
 
 ### Landing page
 

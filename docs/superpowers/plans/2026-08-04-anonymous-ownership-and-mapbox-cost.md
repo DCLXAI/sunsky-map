@@ -265,7 +265,7 @@ git commit -m "Issue an anonymous owner id cookie from middleware"
 - Consumes: nothing.
 - Produces: `Project.ownerId: string` (required) on the generated Prisma client, plus the `Project_ownerId_updatedAt_idx` index. Task 4 reads and writes this field.
 
-- [ ] **Step 1: Confirm the table holds only the known orphan row**
+- [ ] **Step 1: Record what is in the table before migrating**
 
 ```bash
 npx prisma db execute --stdin <<'SQL'
@@ -273,7 +273,10 @@ SELECT id, title, "createdAt" FROM "Project";
 SQL
 ```
 
-Expected: at most one row, titled `New Trip`, created 2026-08-04. **If any unfamiliar row appears, stop and ask** — the migration deletes every row and there is no undo.
+The controller has already checked: one row, `New Trip`, created 2026-08-04, holding only
+the default Seoul→Tokyo waypoints. Its provenance is uncertain — it may be the site owner's
+own click-through rather than test data — so **the migration does not delete anything.**
+Record the row count you observe in your report.
 
 - [ ] **Step 2: Edit `prisma/schema.prisma`**
 
@@ -302,31 +305,41 @@ npx prisma migrate dev --name add_project_owner --create-only
 
 - [ ] **Step 4: Hand-edit the generated SQL**
 
-Prisma emits an `ADD COLUMN ... NOT NULL` that fails against existing rows. Replace the whole file with:
+Prisma emits a bare `ADD COLUMN ... NOT NULL` that fails against existing rows. Replace the
+whole file with:
 
 ```sql
--- The only row is deployment test data, and an anonymous owner cannot be
--- reconstructed for it. Waypoints cascade with their project.
-DELETE FROM "Project";
-
+-- Pre-existing rows get an empty ownerId. Owner ids are always 64 hex
+-- characters, so no visitor's cookie can ever match '' — the rows become
+-- unreachable without being destroyed, and stay recoverable if their real
+-- owner is ever identified.
 -- AlterTable
-ALTER TABLE "Project" ADD COLUMN "ownerId" TEXT NOT NULL;
+ALTER TABLE "Project" ADD COLUMN "ownerId" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Project" ALTER COLUMN "ownerId" DROP DEFAULT;
 
 -- CreateIndex
 CREATE INDEX "Project_ownerId_updatedAt_idx" ON "Project"("ownerId", "updatedAt");
 ```
+
+Dropping the default afterwards keeps new rows required to supply an owner, so application
+code can never silently create an unowned project.
 
 - [ ] **Step 5: Apply it and verify the shape**
 
 ```bash
 npx prisma migrate deploy
 npx prisma db execute --stdin <<'SQL'
-SELECT column_name, is_nullable FROM information_schema.columns
+SELECT column_name, is_nullable, column_default FROM information_schema.columns
 WHERE table_name = 'Project' ORDER BY ordinal_position;
+SQL
+npx prisma db execute --stdin <<'SQL'
+SELECT count(*) AS still_here, count(*) FILTER (WHERE "ownerId" = '') AS unowned FROM "Project";
 SQL
 ```
 
-Expected: migration applies cleanly; `ownerId` appears with `is_nullable = NO`.
+Expected: the migration applies cleanly; `ownerId` is `is_nullable = NO` with a null
+`column_default`; and the pre-existing row is **still present** with `ownerId = ''`. A row
+count of zero means something deleted data and must be reported immediately.
 
 - [ ] **Step 6: Regenerate the client and typecheck**
 

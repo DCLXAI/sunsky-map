@@ -5,9 +5,26 @@ set -uo pipefail
 BASE="${1:-http://localhost:3000}"
 JAR_A="$(mktemp)"
 JAR_B="$(mktemp)"
-trap 'rm -f "$JAR_A" "$JAR_B"' EXIT
+ID=""
 
 fail() { echo "FAIL: $*"; exit 1; }
+
+# Best-effort cleanup. Runs on every exit path (pass, fail, or early abort).
+# Preserves whatever exit status triggered it, and never lets a cleanup
+# failure flip a FAIL into a PASS or vice versa.
+cleanup() {
+  local code=$?
+  if [ -n "$ID" ] && [ "$ID" != "undefined" ] && [ "$ID" != "null" ] && [ "$ID" != "PARSE_ERROR" ]; then
+    curl -s -o /dev/null -X DELETE "$BASE/api/projects/$ID" -b "$JAR_A" -c "$JAR_A" >/dev/null 2>&1 || true
+  fi
+  rm -f "$JAR_A" "$JAR_B"
+  exit "$code"
+}
+trap cleanup EXIT
+
+for bin in node curl; do
+  command -v "$bin" >/dev/null 2>&1 || fail "required command '$bin' not found on PATH"
+done
 
 json_field() {
   node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(String(JSON.parse(d)$1))}catch{process.stdout.write('PARSE_ERROR')}})"
@@ -30,7 +47,7 @@ curl -s -o /dev/null -c "$JAR_B" "$BASE/" || fail "B could not reach $BASE"
 
 # A creates a project.
 ID="$(curl -s -X POST "$BASE/api/projects" -b "$JAR_A" -c "$JAR_A" | json_field '.id')"
-[ -n "$ID" ] && [ "$ID" != "undefined" ] && [ "$ID" != "PARSE_ERROR" ] || fail "A could not create a project (got '$ID')"
+[ -n "$ID" ] && [ "$ID" != "undefined" ] && [ "$ID" != "null" ] && [ "$ID" != "PARSE_ERROR" ] || fail "A could not create a project (got '$ID')"
 echo "A created project $ID"
 
 # A sees it.
@@ -56,8 +73,14 @@ CODE="$(status DELETE "$BASE/api/projects/$ID" "$JAR_B")"
 CODE="$(status GET "$BASE/api/projects/$ID" "$JAR_A")"
 [ "$CODE" = "200" ] || fail "A GET returned $CODE after B's attempts, expected 200"
 
-# Clean up.
+# A deletes its own project. This is a real assertion about the API (must
+# still fail the script if it doesn't return 200) — distinct from the
+# best-effort trap cleanup above/below.
 CODE="$(status DELETE "$BASE/api/projects/$ID" "$JAR_A")"
 [ "$CODE" = "200" ] || fail "A could not delete its own project (got $CODE)"
+
+# Already deleted above; clear ID so the EXIT trap's best-effort cleanup
+# doesn't issue a redundant delete against a now-nonexistent project.
+ID=""
 
 echo "PASS: projects are isolated per visitor"

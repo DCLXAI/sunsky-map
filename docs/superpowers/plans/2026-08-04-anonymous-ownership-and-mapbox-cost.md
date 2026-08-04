@@ -16,7 +16,8 @@
 - Middleware must **overwrite** the owner header with `headers.set(...)`, never `append`, so a client-forged `x-sunsky-owner` on the incoming request can never survive.
 - No test framework is introduced. Verification is the committed shell script from Task 1.
 - Existing commands must keep passing: `npm run build`, `npm run typecheck`, `npm run lint`.
-- Do not commit `.env`, `public/*.webm` source projects, or the temporary capture route.
+- Never commit `.env`, `.env.local`, or the temporary capture route from Task 5. The
+  rendered assets in `public/` **are** committed — they are the shipped background.
 
 ## File Structure
 

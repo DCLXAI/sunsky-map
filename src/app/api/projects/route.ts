@@ -34,7 +34,10 @@ export async function POST() {
                         { order: 1, name: 'Tokyo', lat: 35.6762, lng: 139.6503, transport: 'plane', emoji: '🇯🇵' }
                     ]
                 }
-            }
+            },
+            // Never serialise ownerId back to the client — it is a bearer
+            // credential kept in an httpOnly cookie for a reason.
+            select: { id: true, title: true, updatedAt: true }
         });
         return NextResponse.json(project);
     } catch (error) {

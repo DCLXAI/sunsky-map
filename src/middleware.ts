@@ -5,7 +5,7 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 export function middleware(request: NextRequest) {
     const existing = request.cookies.get(OWNER_COOKIE)?.value;
-    const ownerId = existing ?? createOwnerId();
+    const ownerId = existing || createOwnerId();
 
     // `set`, never `append`: this overwrites any x-sunsky-owner header the
     // client tried to forge, so the cookie is the only source of identity.

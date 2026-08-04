@@ -8,7 +8,9 @@ import type { Feature, FeatureCollection, LineString, Point, Position } from "ge
 import { useEditorStore } from "@/lib/store";
 import { getFlagEmoji, generateSmartRoute } from "@/lib/map-utils";
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const EMPTY_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
 
@@ -66,9 +68,11 @@ export interface MapCanvasHandle {
 interface MapCanvasProps {
     // React 19 types make refs nullable, so the handle must be too.
     mapRef?: React.RefObject<MapCanvasHandle | null>;
+    /** Background usage: stay silent when the map can't be shown. */
+    decorative?: boolean;
 }
 
-const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
+const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef, decorative = false }) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRefInternal = useRef<mapboxgl.Map | null>(null);
     const animationFrameRef = useRef<number | undefined>(undefined);
@@ -208,19 +212,32 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
     // 1. Initialize Map
     useEffect(() => {
+        if (!MAPBOX_TOKEN) return;
         if (mapRefInternal.current || !mapContainer.current) return;
 
-        mapRefInternal.current = new mapboxgl.Map({
-            container: mapContainer.current,
-            // Read once at mount — later style changes are handled by the effect below.
-            style: useEditorStore.getState().mapStyle,
-            center: [127.0, 37.5],
-            zoom: 3,
-            pitch: 0, // Start flat
-            projection: "globe",
-            preserveDrawingBuffer: true,
-            attributionControl: false,
-            antialias: true
+        try {
+            mapRefInternal.current = new mapboxgl.Map({
+                container: mapContainer.current,
+                // Read once at mount — later style changes are handled by the effect below.
+                style: useEditorStore.getState().mapStyle,
+                center: [127.0, 37.5],
+                zoom: 3,
+                pitch: 0, // Start flat
+                projection: "globe",
+                preserveDrawingBuffer: true,
+                attributionControl: false,
+                antialias: true
+            });
+        } catch (err) {
+            // A bad token or a browser without WebGL would otherwise take the
+            // whole page down with it.
+            console.error("Mapbox failed to initialise:", err);
+            mapRefInternal.current = null;
+            return;
+        }
+
+        mapRefInternal.current.on("error", (e) => {
+            console.error("Mapbox error:", e.error ?? e);
         });
 
         mapRefInternal.current.on("load", () => {
@@ -555,6 +572,25 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
         animationFrameRef.current = requestAnimationFrame(animate);
         return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
     }, [isPlaying, isMapLoaded, pathData, setPlaying, waypoints]); // Ensure deps are correct
+
+    // mapbox-gl tears the page down if it is constructed without an access
+    // token, so render a placeholder instead of a map we cannot build.
+    if (!MAPBOX_TOKEN) {
+        if (decorative) return <div className="w-full h-full bg-zinc-950" />;
+
+        return (
+            <div className="w-full h-full bg-zinc-950 flex items-center justify-center p-8">
+                <div className="max-w-md text-center space-y-3">
+                    <div className="text-4xl">🗺️</div>
+                    <p className="text-zinc-200 font-bold text-lg">Map unavailable</p>
+                    <p className="text-zinc-400 text-sm leading-relaxed">
+                        Set <code className="text-zinc-300 bg-white/10 px-1.5 py-0.5 rounded">NEXT_PUBLIC_MAPBOX_TOKEN</code> in
+                        your environment and redeploy to enable the map.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return <div ref={mapContainer} className="w-full h-full bg-gray-50" />;
 };

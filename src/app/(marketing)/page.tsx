@@ -96,7 +96,7 @@ export default function LandingPage() {
         <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-blue-500/30">
             {/* Live Map Background */}
             <div className="fixed inset-0 z-0 pointer-events-none">
-                <MapCanvas />
+                <MapCanvas decorative />
                 <div className="absolute inset-0 bg-black/60" />
             </div>
 

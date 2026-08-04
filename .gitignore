@@ -27,3 +27,4 @@ src/generated/
 
 # OS
 .DS_Store
+.vercel

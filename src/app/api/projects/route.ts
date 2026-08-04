@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getOwnerId } from '@/lib/owner-server';
 
 export async function GET() {
+    const ownerId = await getOwnerId();
+    if (!ownerId) return NextResponse.json({ error: 'Missing owner' }, { status: 401 });
+
     try {
         const projects = await prisma.project.findMany({
+            where: { ownerId },
             orderBy: { updatedAt: 'desc' },
             select: { id: true, title: true, updatedAt: true }
         });
@@ -15,9 +20,13 @@ export async function GET() {
 }
 
 export async function POST() {
+    const ownerId = await getOwnerId();
+    if (!ownerId) return NextResponse.json({ error: 'Missing owner' }, { status: 401 });
+
     try {
         const project = await prisma.project.create({
             data: {
+                ownerId,
                 title: 'New Trip',
                 waypoints: {
                     create: [

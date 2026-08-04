@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getOwnerId } from '@/lib/owner-server';
 
 const TRANSPORT_MODES = ['plane', 'car', 'train', 'walk'] as const;
 type TransportMode = (typeof TRANSPORT_MODES)[number];
@@ -38,6 +39,22 @@ function parseWaypoints(input: unknown): ParsedWaypoint[] | null {
     return parsed;
 }
 
+const NOT_FOUND = NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+/** Resolves the caller's owner id, or null when they may not touch this project.
+ *  A project owned by someone else is reported as absent, not forbidden. */
+async function authorize(id: string): Promise<string | null> {
+    const ownerId = await getOwnerId();
+    if (!ownerId) return null;
+
+    const project = await prisma.project.findUnique({
+        where: { id },
+        select: { ownerId: true },
+    });
+
+    return project?.ownerId === ownerId ? ownerId : null;
+}
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
@@ -45,12 +62,14 @@ export async function GET(
     const { id } = await params;
 
     try {
+        if (!(await authorize(id))) return NOT_FOUND;
+
         const project = await prisma.project.findUnique({
             where: { id },
             include: { waypoints: { orderBy: { order: 'asc' } } }
         });
 
-        if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        if (!project) return NOT_FOUND;
         return NextResponse.json(project);
     } catch (error) {
         console.error('API Error in GET /projects/[id]:', error);
@@ -79,6 +98,8 @@ export async function PUT(
     }
 
     try {
+        if (!(await authorize(id))) return NOT_FOUND;
+
         await prisma.$transaction([
             prisma.waypoint.deleteMany({ where: { projectId: id } }),
             prisma.project.update({
@@ -103,8 +124,15 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params;
+
     try {
-        await prisma.project.delete({ where: { id } });
+        const ownerId = await getOwnerId();
+        if (!ownerId) return NOT_FOUND;
+
+        // Scoping the delete to the owner makes the check and the write atomic.
+        const { count } = await prisma.project.deleteMany({ where: { id, ownerId } });
+        if (count === 0) return NOT_FOUND;
+
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('API Error in DELETE /projects/[id]:', error);

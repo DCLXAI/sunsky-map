@@ -1,6 +1,10 @@
-// @ts-ignore
 import * as turf from '@turf/turf';
-import { Waypoint } from './store';
+import type { LineString, Position } from 'geojson';
+import type { Waypoint } from './store';
+
+interface DirectionsResponse {
+    routes?: { geometry: LineString }[];
+}
 
 // Async Smart Route Generation (Directions API)
 export const generateSmartRoute = async (waypoints: Waypoint[]) => {
@@ -12,15 +16,16 @@ export const generateSmartRoute = async (waypoints: Waypoint[]) => {
         const startPt = [start.lng, start.lat];
         const endPt = [end.lng, end.lat];
 
-        let coordinates: number[][] = [];
+        let coordinates: Position[] = [];
 
         // 1. Plane (Great Circle)
         if (start.transport === 'plane') {
             const geometry = turf.greatCircle(startPt, endPt, { npoints: 200 }).geometry;
             if (geometry.type === 'MultiLineString') {
-                (geometry as any).coordinates.forEach((c: any) => coordinates.push(...c));
+                // The great circle is split into two lines when it crosses the dateline.
+                geometry.coordinates.forEach((c) => coordinates.push(...c));
             } else {
-                coordinates = geometry.coordinates as number[][];
+                coordinates = geometry.coordinates;
             }
         }
         // 2. Ground (Directions API)
@@ -32,22 +37,24 @@ export const generateSmartRoute = async (waypoints: Waypoint[]) => {
 
                 const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${start.lng},${start.lat};${end.lng},${end.lat}?geometries=geojson&access_token=${token}`;
                 const res = await fetch(url);
-                const data = await res.json();
+                const data: DirectionsResponse = await res.json();
 
                 if (data.routes && data.routes.length > 0) {
                     const rawGeo = data.routes[0].geometry;
                     // Simplify route to reduce camera jitter on winding roads
                     // Tolerance 0.001 is approx 100m precision, good balance for world scale
                     const simplified = turf.simplify(turf.feature(rawGeo), { tolerance: 0.001, highQuality: true });
-                    coordinates = (simplified.geometry as any).coordinates;
+                    coordinates = simplified.geometry.coordinates;
                 } else {
                     throw new Error("No route found");
                 }
             } catch (e) {
                 console.warn(`Directions API failed for ${start.name}->${end.name}, falling back to straight line.`, e);
-                // Fallback: Direct Line (not greatCircle for short ground distance? actually greatCircle is fine)
-                // Use simple straight line for very short text? no, greatCircle is safe.
-                coordinates = turf.greatCircle(startPt, endPt, { npoints: 50 }).geometry.coordinates as number[][];
+                // Fallback: great circle still looks right at ground distances.
+                const fallback = turf.greatCircle(startPt, endPt, { npoints: 50 }).geometry;
+                coordinates = fallback.type === 'MultiLineString'
+                    ? fallback.coordinates.flat()
+                    : fallback.coordinates;
             }
         }
 
@@ -79,37 +86,6 @@ export const fixDatelineCrossing = (coords: number[][]) => {
         coords[i][0] = currLon;
     }
     return coords;
-};
-
-// Deprecated: Sync version kept for fallback init
-export const generateFullRoute = (waypoints: Waypoint[]) => {
-    if (waypoints.length < 2) return [];
-    const coords: number[][] = [];
-
-    for (let i = 0; i < waypoints.length - 1; i++) {
-        const start = waypoints[i];
-        const end = waypoints[i + 1];
-        const startPt = [start.lng, start.lat];
-        const endPt = [end.lng, end.lat];
-
-        let segment: number[][] = [];
-        if (start.transport === 'plane') {
-            const geometry = turf.greatCircle(startPt, endPt, { npoints: 200 }).geometry;
-            if (geometry.type === 'MultiLineString') {
-                const rawCoords = (geometry as any).coordinates as number[][][];
-                rawCoords.forEach(c => segment.push(...c));
-            } else {
-                segment = geometry.coordinates as number[][];
-            }
-        } else {
-            segment = [startPt, endPt];
-        }
-
-        if (i > 0) segment.shift();
-        coords.push(...segment);
-    }
-
-    return fixDatelineCrossing(coords);
 };
 
 export const getFlagEmoji = (countryCode: string) => {

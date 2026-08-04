@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useEditorStore } from '@/lib/store';
-import { generateFullRoute, getFlagEmoji } from '@/lib/map-utils';
+import { useEditorStore, type TransportMode, type Waypoint } from '@/lib/store';
+import { getFlagEmoji } from '@/lib/map-utils';
 import { useTranslation } from '@/lib/i18n';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Trash2, Plane, Car, Train, Footprints, Search, Plus, MapPin, Sparkles, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { GripVertical, Trash2, Plane, Car, Train, Footprints, Search, Sparkles, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface GeocodingFeature {
     id: string;
@@ -15,10 +15,18 @@ interface GeocodingFeature {
     context?: { id: string, short_code?: string }[];
 }
 
+interface GeneratedWaypoint {
+    name: string;
+    lat: number;
+    lng: number;
+    transport?: TransportMode;
+    emoji?: string;
+}
+
 import { toast } from "sonner";
 
 export default function FloatingPanel() {
-    const { waypoints, updateWaypoint, removeWaypoint, reorderWaypoints, projectTitle, setProjectTitle, addWaypoint, setWaypoints, setCameraView } = useEditorStore();
+    const { waypoints, updateWaypoint, removeWaypoint, reorderWaypoints, projectTitle, setProjectTitle, addWaypoint, setWaypoints, mapStyle, setMapStyle, cameraView, setCameraView } = useEditorStore();
     const { t } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<GeocodingFeature[]>([]);
@@ -44,7 +52,7 @@ export default function FloatingPanel() {
             const data = await res.json();
 
             if (data.waypoints) {
-                const newWaypoints = data.waypoints.map((wp: any) => ({
+                const newWaypoints: Waypoint[] = data.waypoints.map((wp: GeneratedWaypoint) => ({
                     id: crypto.randomUUID(),
                     name: wp.name,
                     lat: wp.lat,
@@ -57,7 +65,6 @@ export default function FloatingPanel() {
                 setShowAi(false);
                 setAiPrompt('');
                 // Default to 'follow' view for new route
-                setCameraView('follow');
                 setCameraView('follow');
                 toast.success("Route generated successfully!", { id: toastId });
             } else {
@@ -75,6 +82,28 @@ export default function FloatingPanel() {
         }
     };
 
+    const performSearch = useCallback(async (query: string) => {
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+        if (!token) {
+            console.warn("NEXT_PUBLIC_MAPBOX_TOKEN is not set — city search is disabled.");
+            return;
+        }
+
+        setIsSearching(true);
+        try {
+            const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&types=place,locality&limit=5`);
+            const data: { features?: GeocodingFeature[] } = await res.json();
+            if (data.features) {
+                setSearchResults(data.features);
+                setShowResults(true);
+            }
+        } catch (e) {
+            console.error("Geocoding error:", e);
+        } finally {
+            setIsSearching(false);
+        }
+    }, []);
+
     // Debounced Search
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -85,26 +114,7 @@ export default function FloatingPanel() {
             }
         }, 300);
         return () => clearTimeout(timer);
-    }, [searchQuery]);
-
-    const performSearch = async (query: string) => {
-        setIsSearching(true);
-        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-        if (!token) return;
-
-        try {
-            const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&types=place,locality&limit=5`);
-            const data = await res.json();
-            if (data.features) {
-                setSearchResults(data.features);
-                setShowResults(true);
-            }
-        } catch (e) {
-            console.error("Geocoding error:", e);
-        } finally {
-            setIsSearching(false);
-        }
-    };
+    }, [searchQuery, performSearch]);
 
     const handleSelectCity = (feature: GeocodingFeature) => {
         addWaypoint({
@@ -269,14 +279,14 @@ export default function FloatingPanel() {
                     ].map((s) => (
                         <button
                             key={s.id}
-                            onClick={() => useEditorStore.getState().setMapStyle(s.style)}
-                            className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${useEditorStore.getState().mapStyle === s.style
+                            onClick={() => setMapStyle(s.style)}
+                            className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${mapStyle === s.style
                                 ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-inner'
                                 : 'bg-transparent border-transparent hover:bg-gray-100 text-gray-500'
                                 }`}
                         >
                             <span className="text-xl">{s.icon}</span>
-                            <span className="text-[10px] font-bold">{s.name}</span>
+                            <span className="text-[10px] font-bold">{t(s.name)}</span>
                         </button>
                     ))}
                 </div>
@@ -284,16 +294,16 @@ export default function FloatingPanel() {
                 {/* Camera Selector */}
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 mt-4">{t("Camera View")}</h2>
                 <div className="grid grid-cols-4 gap-2">
-                    {[
+                    {([
                         { id: 'follow', name: 'Chase', icon: '🎥' }, // follow
                         { id: 'top', name: 'Top', icon: '⬇️' }, // top-down
                         { id: 'side', name: 'Side', icon: '🚁' }, // side
                         { id: 'global', name: 'World', icon: '🌍' } // global
-                    ].map((c) => (
+                    ] as const).map((c) => (
                         <button
                             key={c.id}
-                            onClick={() => useEditorStore.getState().setCameraView(c.id as any)}
-                            className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${useEditorStore.getState().cameraView === c.id
+                            onClick={() => setCameraView(c.id)}
+                            className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${cameraView === c.id
                                 ? 'bg-indigo-50 border-indigo-500 text-indigo-600 shadow-inner'
                                 : 'bg-transparent border-transparent hover:bg-gray-100 text-gray-500'
                                 }`}

@@ -1,66 +1,103 @@
-
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { NextResponse } from "next/server";
 
+const SYSTEM_PROMPT = `You are a smart travel assistant. Extract a sequence of travel waypoints from the user's natural language description.
+
+For each waypoint:
+- name: city name
+- lat / lng: its real coordinates
+- transport: how the traveller reaches this stop from the previous one — "plane" | "car" | "train" | "walk". Infer from distance and context; default to "plane" for long distances.
+- emoji: a relevant emoji for the city or country`;
+
+const RESPONSE_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+        waypoints: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    name: { type: Type.STRING },
+                    lat: { type: Type.NUMBER },
+                    lng: { type: Type.NUMBER },
+                    transport: {
+                        type: Type.STRING,
+                        enum: ["plane", "car", "train", "walk"],
+                    },
+                    emoji: { type: Type.STRING },
+                },
+                required: ["name", "lat", "lng", "transport", "emoji"],
+            },
+        },
+    },
+    required: ["waypoints"],
+};
+
 export async function POST(req: Request) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        return NextResponse.json(
+            { error: "GEMINI_API_KEY is not configured on the server." },
+            { status: 500 }
+        );
+    }
+
+    let prompt: unknown;
     try {
-        const { prompt } = await req.json();
+        ({ prompt } = await req.json());
+    } catch {
+        return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
 
-        if (!process.env.GEMINI_API_KEY) {
-            return NextResponse.json({ error: "Gemini API Key is missing" }, { status: 500 });
+    if (typeof prompt !== "string" || !prompt.trim()) {
+        return NextResponse.json({ error: "A non-empty 'prompt' is required." }, { status: 400 });
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                systemInstruction: SYSTEM_PROMPT,
+                responseMimeType: "application/json",
+                responseSchema: RESPONSE_SCHEMA,
+            },
+        });
+
+        const text = response.text;
+        if (!text) {
+            return NextResponse.json(
+                { error: "The model returned an empty response. Please rephrase and try again." },
+                { status: 502 }
+            );
         }
 
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-        const systemPrompt = `
-        You are a smart travel assistant. Your goal is to extract a sequence of travel waypoints from the user's natural language description.
-        
-        Return ONLY a raw JSON object (no markdown formatting) with a "waypoints" array.
-        Each waypoint must have:
-        - name: City name (string)
-        - lat: Latitude (number)
-        - lng: Longitude (number)
-        - transport: "plane" | "car" | "train" | "walk" (infer based on distance/context. Default to plane for long distance)
-        - emoji: A relevant emoji for the city/country (string)
-
-        Example Input: "I want to go to Seoul, then Tokyo, then Paris"
-        Example Output:
-        {
-            "waypoints": [
-                { "name": "Seoul", "lat": 37.5665, "lng": 126.9780, "transport": "plane", "emoji": "🇰🇷" },
-                { "name": "Tokyo", "lat": 35.6762, "lng": 139.6503, "transport": "plane", "emoji": "🇯🇵" },
-                { "name": "Paris", "lat": 48.8566, "lng": 2.3522, "transport": "plane", "emoji": "🇫🇷" }
-            ]
-        }
-        `;
-
-        const result = await model.generateContent([systemPrompt, prompt]);
-        const response = await result.response;
-        const text = response.text();
-
-        // Clean up markdown code blocks if present
-        const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const data = JSON.parse(jsonStr);
-
-        return NextResponse.json(data);
-
-    } catch (error: any) {
+        // responseSchema guarantees well-formed JSON, so no markdown stripping needed.
+        return NextResponse.json(JSON.parse(text));
+    } catch (error) {
         console.error("AI Generation Error:", error);
+        const message = error instanceof Error ? error.message : String(error);
 
-        // Check for common API errors
-        if (error.message?.includes("404") || error.message?.includes("not found")) {
-            return NextResponse.json({
-                error: "Gemini API Error: Model not found. Please ensure 'Generative Language API' is ENABLED in your Google Cloud Console for this API key."
-            }, { status: 404 });
+        if (message.includes("404") || message.includes("not found")) {
+            return NextResponse.json(
+                {
+                    error: "Gemini API Error: model not found. Make sure the 'Generative Language API' is enabled for this API key.",
+                },
+                { status: 404 }
+            );
         }
 
-        if (error.message?.includes("403") || error.message?.includes("permission")) {
-            return NextResponse.json({
-                error: "Gemini API Permission Error: Your API key invalid or does not have access to this model."
-            }, { status: 403 });
+        if (message.includes("403") || message.includes("permission") || message.includes("API key")) {
+            return NextResponse.json(
+                { error: "Gemini API Error: the API key is invalid or lacks access to this model." },
+                { status: 403 }
+            );
         }
 
-        return NextResponse.json({ error: "Failed to generate route. Please check your API key and network." }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to generate route. Please check your API key and network." },
+            { status: 500 }
+        );
     }
 }

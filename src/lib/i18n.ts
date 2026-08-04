@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useEditorStore } from "./store";
 
 type Language = 'en' | 'ko';
@@ -19,7 +20,9 @@ const translations: Record<string, Record<Language, string>> = {
     "Camera View": { en: "Camera View", ko: "카메라 시점" },
 
     // Camera Modes
+    "Chase": { en: "Chase", ko: "팔로우" },
     "Follow": { en: "Follow", ko: "팔로우" },
+    "Map": { en: "Map", ko: "지도" },
     "Top": { en: "Top", ko: "탑뷰" },
     "Side": { en: "Side", ko: "사이드" },
     "World": { en: "World", ko: "월드" },
@@ -27,6 +30,9 @@ const translations: Record<string, Record<Language, string>> = {
     // Toast Messages
     "Project saved successfully!": { en: "Project saved successfully!", ko: "프로젝트가 저장되었습니다!" },
     "Failed to save project.": { en: "Failed to save project.", ko: "저장에 실패했습니다." },
+    "Failed to load project.": { en: "Failed to load project.", ko: "프로젝트를 불러오지 못했습니다." },
+    "Failed to capture map stream. Try again.": { en: "Failed to capture map stream. Try again.", ko: "지도 화면 캡처에 실패했습니다. 다시 시도해주세요." },
+    "Recording failed. Please try a different browser.": { en: "Recording failed. Please try a different browser.", ko: "녹화에 실패했습니다. 다른 브라우저를 사용해보세요." },
     "Export finished! Downloading video...": { en: "Export finished! Downloading video...", ko: "내보내기 완료! 다운로드 중..." },
     "Recording started... Please wait for animation to finish.": { en: "Recording started... Please wait for animation to finish.", ko: "녹화 시작... 애니메이션이 끝날 때까지 기다려주세요." },
     "Map is not ready yet.": { en: "Map is not ready yet.", ko: "지도가 아직 준비되지 않았습니다." },
@@ -36,13 +42,18 @@ const translations: Record<string, Record<Language, string>> = {
 };
 
 export const useTranslation = () => {
-    const { language } = useEditorStore();
+    // Subscribe to just `language` so unrelated store updates don't re-render consumers.
+    const language = useEditorStore((state) => state.language);
 
-    const t = (key: string): string => {
-        const entry = translations[key];
-        if (!entry) return key; // Fallback to key if missing
-        return entry[language] || key;
-    };
+    // Stable across renders for a given language, so `t` is safe in effect deps.
+    const t = useCallback(
+        (key: string): string => {
+            const entry = translations[key];
+            if (!entry) return key; // Fallback to key if missing
+            return entry[language] || key;
+        },
+        [language]
+    );
 
     return { t, language };
 };

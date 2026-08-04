@@ -1,9 +1,13 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "TravelRoute Studio",
-    description: "Turn your trips into cinematic map animations",
+    title: "Sunsky.ai — Cinematic Travel Route Animations",
+    description: "Turn your trips into cinematic 3D map animations and export them as video.",
+};
+
+export const viewport: Viewport = {
+    themeColor: "#050505",
 };
 
 export default function RootLayout({

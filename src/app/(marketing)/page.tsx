@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Trash2 } from 'lucide-react';
 import { useEditorStore } from '@/lib/store';
@@ -7,25 +7,40 @@ import dynamic from 'next/dynamic';
 
 const MapCanvas = dynamic(() => import('@/components/map/MapCanvas'), { ssr: false });
 
+interface ProjectSummary {
+    id: string;
+    title: string;
+    updatedAt: string;
+}
+
 export default function LandingPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [projects, setProjects] = useState<any[]>([]);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
-    const fetchProjects = () => {
-        fetch('/api/projects').then(res => res.json()).then(setProjects).catch(console.error);
-    }
+    const fetchProjects = useCallback(() => {
+        fetch('/api/projects')
+            .then(res => res.json())
+            .then((data: ProjectSummary[] | { error: string }) => {
+                setProjects(Array.isArray(data) ? data : []);
+            })
+            .catch(console.error);
+    }, []);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useState(() => { fetchProjects(); });
+    useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
     const handleStart = async () => {
         setLoading(true);
         try {
             const res = await fetch('/api/projects', { method: 'POST' });
             const data = await res.json();
-            if (data.id) router.push(`/projects/${data.id}/editor`);
-        } catch {
+            if (data.id) {
+                router.push(`/projects/${data.id}/editor`);
+                return;
+            }
+            throw new Error(data.error ?? 'Unknown error');
+        } catch (err) {
+            console.error(err);
             alert("Error creating project");
             setLoading(false);
         }
@@ -42,7 +57,8 @@ export default function LandingPage() {
     const confirmDelete = async () => {
         if (!projectToDelete) return;
         try {
-            await fetch(`/api/projects/${projectToDelete}`, { method: 'DELETE' });
+            const res = await fetch(`/api/projects/${projectToDelete}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`Delete failed (${res.status})`);
             setProjectToDelete(null);
             fetchProjects(); // Refresh list
         } catch (err) {

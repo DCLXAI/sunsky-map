@@ -14,13 +14,13 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
 }
 
-/* MapLibre GL overrides */
-.maplibregl-map {
+/* Mapbox GL overrides */
+.mapboxgl-map {
   width: 100%;
   height: 100%;
 }
 
-.maplibregl-canvas {
+.mapboxgl-canvas {
   outline: none;
 }
 

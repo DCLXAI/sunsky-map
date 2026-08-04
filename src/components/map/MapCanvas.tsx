@@ -1,15 +1,36 @@
 "use client";
 
-import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from "react";
+import React, { useEffect, useRef, useImperativeHandle, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-// @ts-ignore
 import * as turf from "@turf/turf";
-import * as THREE from "three";
+import type { Feature, FeatureCollection, LineString, Point, Position } from "geojson";
 import { useEditorStore } from "@/lib/store";
-import { generateFullRoute, getFlagEmoji, generateSmartRoute } from "@/lib/map-utils";
+import { getFlagEmoji, generateSmartRoute } from "@/lib/map-utils";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+
+const EMPTY_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
+
+const lineFeature = (coordinates: Position[]): Feature<LineString> => ({
+    type: "Feature",
+    properties: {},
+    geometry: { type: "LineString", coordinates },
+});
+
+const geoSource = (map: mapboxgl.Map, id: string) =>
+    map.getSource(id) as mapboxgl.GeoJSONSource | undefined;
+
+/** GeoJSON `Position` is number[]; Mapbox wants a fixed-length lng/lat pair. */
+const toLngLat = (position: Position): [number, number] => [position[0], position[1]];
+
+/** Shape of the Mapbox Geocoding v5 features we actually read. */
+interface GeocodingFeature {
+    id: string;
+    text: string;
+    context?: { id: string; short_code?: string }[];
+    properties?: { short_code?: string };
+}
 
 const createEmojiImage = (emoji: string): HTMLImageElement => {
     const canvas = document.createElement('canvas');
@@ -43,13 +64,14 @@ export interface MapCanvasHandle {
 }
 
 interface MapCanvasProps {
-    mapRef?: React.RefObject<MapCanvasHandle>;
+    // React 19 types make refs nullable, so the handle must be too.
+    mapRef?: React.RefObject<MapCanvasHandle | null>;
 }
 
 const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRefInternal = useRef<mapboxgl.Map | null>(null);
-    const animationFrameRef = useRef<number>();
+    const animationFrameRef = useRef<number | undefined>(undefined);
     const lastBearingRef = useRef(0);
     const [isMapLoaded, setIsMapLoaded] = useState(false);
     const { waypoints, isPlaying, setPlaying, mapStyle } = useEditorStore();
@@ -190,7 +212,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
         mapRefInternal.current = new mapboxgl.Map({
             container: mapContainer.current,
-            style: mapStyle,
+            // Read once at mount — later style changes are handled by the effect below.
+            style: useEditorStore.getState().mapStyle,
             center: [127.0, 37.5],
             zoom: 3,
             pitch: 0, // Start flat
@@ -212,12 +235,12 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
                 let emoji = "🏳️"; // Default to flag-ish if country unknown
                 try {
                     const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}&types=place,country&limit=1`);
-                    const data = await res.json();
+                    const data: { features?: GeocodingFeature[] } = await res.json();
                     if (data.features && data.features.length > 0) {
                         const feature = data.features[0];
                         name = feature.text;
-                        const countryContext = feature.context?.find((c: any) => c.id.startsWith('country')) || (feature.id.startsWith('country') ? feature : null);
-                        if (countryContext && countryContext.short_code) {
+                        const countryContext = feature.context?.find((c) => c.id.startsWith('country'));
+                        if (countryContext?.short_code) {
                             emoji = getFlagEmoji(countryContext.short_code);
                         } else if (feature.properties?.short_code) {
                             emoji = getFlagEmoji(feature.properties.short_code);
@@ -235,6 +258,12 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
             setIsMapLoaded(true);
         });
+
+        return () => {
+            mapRefInternal.current?.remove();
+            mapRefInternal.current = null;
+            setIsMapLoaded(false);
+        };
     }, []);
 
     const [routePath, setRoutePath] = useState<number[][]>([]);
@@ -276,34 +305,25 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
         // Sync Source Data
 
         // A. Preview Route (Untraveled)
-        if (map.getSource('route-preview')) {
-            const geoData = (isPlaying && validPath.length > 1)
-                ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: validPath } }
-                : { type: 'FeatureCollection', features: [] };
-            (map.getSource('route-preview') as any).setData(geoData);
-        }
+        geoSource(map, 'route-preview')?.setData(
+            (isPlaying && validPath.length > 1) ? lineFeature(validPath) : EMPTY_COLLECTION
+        );
 
-        // B. Active Route (Traveled)
-        if (map.getSource('route-active')) {
-            // ONLY show full path if NOT playing. 
-            const geoData = (!isPlaying && validPath.length > 1)
-                ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: validPath } }
-                : { type: 'FeatureCollection', features: [] };
-            (map.getSource('route-active') as any).setData(geoData);
-        }
+        // B. Active Route (Traveled) — only show the full path while paused.
+        geoSource(map, 'route-active')?.setData(
+            (!isPlaying && validPath.length > 1) ? lineFeature(validPath) : EMPTY_COLLECTION
+        );
 
-        if (map.getSource('markers')) {
-            const markerFeatures = waypoints.map(wp => ({
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: [wp.lng, wp.lat] },
-                properties: {
-                    iconId: `emoji-${wp.emoji || '📍'}`,
-                    size: isPlaying ? 0 : 1, // Hide markers initially if playing (they pop in during animate)
-                    name: wp.name
-                }
-            }));
-            (map.getSource('markers') as any).setData({ type: 'FeatureCollection', features: markerFeatures });
-        }
+        const markerFeatures: Feature<Point>[] = waypoints.map(wp => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [wp.lng, wp.lat] },
+            properties: {
+                iconId: `emoji-${wp.emoji || '📍'}`,
+                size: isPlaying ? 0 : 1, // Hide markers initially if playing (they pop in during animate)
+                name: wp.name
+            }
+        }));
+        geoSource(map, 'markers')?.setData({ type: 'FeatureCollection', features: markerFeatures });
 
         // Fit Bounds (Only on static state or initial load)
         if (!isPlaying && validPath.length > 0) {
@@ -341,8 +361,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
         if (routePath.length < 2) return null;
 
         // 1. Base Line
-        let baseLine: any;
-        try { baseLine = turf.lineString(routePath as any); } catch (e) { return null; }
+        let baseLine: Feature<LineString>;
+        try { baseLine = turf.lineString(routePath); } catch { return null; }
         const totalLen = turf.length(baseLine);
 
         // 2. Interpolated Path (High-Res)
@@ -367,13 +387,13 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
             let minD = Infinity;
 
             for (let j = lastIndex; j < routePath.length; j++) {
-                const d = turf.distance(target, turf.point(routePath[j] as any));
+                const d = turf.distance(target, turf.point(routePath[j]));
                 if (d < minD) { minD = d; bestIdx = j; }
             }
 
             const segmentCoords = routePath.slice(lastIndex, bestIdx + 1);
             if (segmentCoords.length > 1) {
-                runningDist += turf.length(turf.lineString(segmentCoords as any));
+                runningDist += turf.length(turf.lineString(segmentCoords));
             }
             waypointDistances.push(runningDist);
             lastIndex = bestIdx;
@@ -401,10 +421,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
             // 1. Finish Check
             if (elapsed >= totalDuration) {
                 if (mapRefInternal.current) {
-                    const sActive = mapRefInternal.current.getSource('route-active') as any;
-                    const sPreview = mapRefInternal.current.getSource('route-preview') as any;
-                    if (sActive) sActive.setData(baseLine);
-                    if (sPreview) sPreview.setData({ type: 'FeatureCollection', features: [] });
+                    geoSource(mapRefInternal.current, 'route-active')?.setData(baseLine);
+                    geoSource(mapRefInternal.current, 'route-preview')?.setData(EMPTY_COLLECTION);
                 }
                 setPlaying(false);
                 return;
@@ -430,18 +448,15 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
             // 4. Render Disjoint Layers (Vertex Slicing)
             if (mapRefInternal.current) {
-                const sActive = mapRefInternal.current.getSource('route-active') as any;
-                const sPreview = mapRefInternal.current.getSource('route-preview') as any;
-                const sPoint = mapRefInternal.current.getSource('point') as any;
+                const sActive = geoSource(mapRefInternal.current, 'route-active');
+                const sPreview = geoSource(mapRefInternal.current, 'route-preview');
+                const sPoint = geoSource(mapRefInternal.current, 'point');
 
                 // Active Path (History)
                 if (sActive && safeIndex > 0) {
                     const activeSlice = interpolatedPath.slice(0, safeIndex + 1);
                     if (activeSlice.length >= 2) {
-                        sActive.setData({
-                            type: 'Feature', properties: {},
-                            geometry: { type: 'LineString', coordinates: activeSlice }
-                        });
+                        sActive.setData(lineFeature(activeSlice));
                     }
                 }
 
@@ -450,12 +465,9 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
                     const previewSlice = interpolatedPath.slice(safeIndex);
                     // Single point overlap ensures connectivity without visual doubling
                     if (previewSlice.length >= 2) {
-                        sPreview.setData({
-                            type: 'Feature', properties: {},
-                            geometry: { type: 'LineString', coordinates: previewSlice }
-                        });
+                        sPreview.setData(lineFeature(previewSlice));
                     } else {
-                        sPreview.setData({ type: 'FeatureCollection', features: [] });
+                        sPreview.setData(EMPTY_COLLECTION);
                     }
                 }
 
@@ -469,14 +481,12 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
                     const transport = waypoints[currentSegIndex]?.transport || 'plane';
 
-                    sPoint.setData({
-                        type: 'FeatureCollection',
-                        features: [{
-                            type: 'Feature',
-                            properties: { bearing, icon: `transport-${transport}` },
-                            geometry: { type: 'Point', coordinates: coords }
-                        }]
-                    });
+                    const pointFeature: Feature<Point> = {
+                        type: 'Feature',
+                        properties: { bearing, icon: `transport-${transport}` },
+                        geometry: { type: 'Point', coordinates: coords }
+                    };
+                    sPoint.setData({ type: 'FeatureCollection', features: [pointFeature] });
 
                     // Camera Follow
                     const camView = useEditorStore.getState().cameraView;
@@ -484,15 +494,15 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
                     lastBearingRef.current = smoothedBearing;
 
                     if (camView !== 'global') {
-                        const cameraOptions: any = { center: coords, duration: 0, bearing: smoothedBearing };
+                        const cameraOptions: NonNullable<Parameters<mapboxgl.Map['easeTo']>[0]> = { center: coords, duration: 0, bearing: smoothedBearing };
                         if (camView === 'top') { cameraOptions.zoom = 4; cameraOptions.pitch = 0; }
                         else if (camView === 'side') {
                             const sidePt = turf.destination(p1, 200, smoothedBearing - 90, { units: 'kilometers' });
-                            cameraOptions.center = sidePt.geometry.coordinates;
+                            cameraOptions.center = toLngLat(sidePt.geometry.coordinates);
                             cameraOptions.zoom = 4.5; cameraOptions.pitch = 65; cameraOptions.bearing = smoothedBearing + 90;
                         } else { // Follow
                             const backPt = turf.destination(p1, 400, smoothedBearing + 180, { units: 'kilometers' });
-                            cameraOptions.center = backPt.geometry.coordinates;
+                            cameraOptions.center = toLngLat(backPt.geometry.coordinates);
                             cameraOptions.zoom = 4.2; cameraOptions.pitch = 55;
                         }
                         mapRefInternal.current.easeTo(cameraOptions);
@@ -502,7 +512,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
             // 5. Marker Logic
             let markersUpdated = false;
-            waypoints.forEach((wp, i) => {
+            waypoints.forEach((wp) => {
                 if (visitedSet.has(wp.id)) return;
                 const distToWp = turf.distance(turf.point(coords), [wp.lng, wp.lat]);
                 if (distToWp < 500) {
@@ -511,8 +521,12 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
                 }
             });
 
-            if (markersUpdated && mapRefInternal.current?.getSource('markers')) {
-                const markerFeatures = waypoints.map((wp, i) => {
+            const markerSource = mapRefInternal.current
+                ? geoSource(mapRefInternal.current, 'markers')
+                : undefined;
+
+            if (markersUpdated && markerSource) {
+                const markerFeatures: Feature<Point>[] = waypoints.map((wp, i) => {
                     const isVisited = visitedSet.has(wp.id);
                     let displayName = wp.name;
 
@@ -532,7 +546,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
                         }
                     };
                 });
-                (mapRefInternal.current.getSource('markers') as any).setData({ type: 'FeatureCollection', features: markerFeatures });
+                markerSource.setData({ type: 'FeatureCollection', features: markerFeatures });
             }
 
             animationFrameRef.current = requestAnimationFrame(animate);

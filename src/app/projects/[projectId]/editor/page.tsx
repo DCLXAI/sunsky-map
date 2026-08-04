@@ -1,25 +1,33 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { use, useRef, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import FloatingPanel from '@/components/editor/FloatingPanel';
 import { useEditorStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { Toaster } from '@/components/ui/toaster';
 import { toast } from 'sonner';
-import { Play, Download, Loader2, Save, X, Settings2 } from 'lucide-react';
-import Link from 'next/link';
+import { Play, Download, Loader2, Save, X } from 'lucide-react';
 import type { MapCanvasHandle } from '@/components/map/MapCanvas';
+import type { TransportMode } from '@/lib/store';
+
+interface ApiWaypoint {
+    id?: string;
+    name: string;
+    lat: number;
+    lng: number;
+    transport: TransportMode;
+    emoji?: string | null;
+}
 
 const MapCanvas = dynamic(() => import('@/components/map/MapCanvas'), {
     ssr: false,
     loading: () => <div className="w-full h-full bg-black flex items-center justify-center text-white font-mono text-sm">INITIALIZING SYSTEM...</div>
 });
 
-// ... (existing imports)
-
-export default function EditorPage({ params }: { params: { projectId: string } }) {
-    const { projectId } = params;
+export default function EditorPage({ params }: { params: Promise<{ projectId: string }> }) {
+    // Next 16 hands route params to the page as a promise.
+    const { projectId } = use(params);
     const mapRef = useRef<MapCanvasHandle>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -34,12 +42,17 @@ export default function EditorPage({ params }: { params: { projectId: string } }
     }, [isPlaying, isExporting]);
 
     useEffect(() => {
-        fetch(`/api/projects/${projectId}`)
-            .then(res => res.json())
-            .then(data => {
+        const controller = new AbortController();
+
+        fetch(`/api/projects/${projectId}`, { signal: controller.signal })
+            .then(res => {
+                if (!res.ok) throw new Error(`Failed to load project (${res.status})`);
+                return res.json();
+            })
+            .then((data: { title?: string; waypoints?: ApiWaypoint[] }) => {
                 if (data.title) setProjectTitle(data.title);
                 if (data.waypoints) {
-                    setWaypoints(data.waypoints.map((wp: any) => {
+                    setWaypoints(data.waypoints.map((wp) => {
                         let emoji = wp.emoji;
                         // Legacy Fix for Seoul/Tokyo
                         if (!emoji || emoji === '📍') {
@@ -54,8 +67,15 @@ export default function EditorPage({ params }: { params: { projectId: string } }
                         };
                     }));
                 }
+            })
+            .catch((err: unknown) => {
+                if (err instanceof DOMException && err.name === 'AbortError') return;
+                console.error(err);
+                toast.error(t("Failed to load project."));
             });
-    }, [projectId]);
+
+        return () => controller.abort();
+    }, [projectId, setProjectTitle, setWaypoints, t]);
 
     const handleSave = async () => {
         console.log("Saving project...");

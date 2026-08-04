@@ -19,6 +19,9 @@ prisma/dev.db
 # generated prisma client (recreated by `prisma generate`)
 src/generated/
 
+# superpowers subagent-driven-development scratch
+.superpowers/
+
 # vercel
 .vercel/
 

@@ -429,7 +429,10 @@ import { getOwnerId } from '@/lib/owner-server';
 Add this helper below `parseWaypoints`, leaving `TRANSPORT_MODES`, `ParsedWaypoint` and `parseWaypoints` exactly as they are:
 
 ```ts
-const NOT_FOUND = NextResponse.json({ error: 'Not found' }, { status: 404 });
+// A factory, not a constant: a Response body is a stream that can only be
+// piped once, so a shared instance sends an empty body on its second use and
+// throws "ReadableStream is locked" when two denials overlap.
+const notFound = () => NextResponse.json({ error: 'Not found' }, { status: 404 });
 
 /** Resolves the caller's owner id, or null when they may not touch this project.
  *  A project owned by someone else is reported as absent, not forbidden. */
@@ -456,14 +459,14 @@ export async function GET(
     const { id } = await params;
 
     try {
-        if (!(await authorize(id))) return NOT_FOUND;
+        if (!(await authorize(id))) return notFound();
 
         const project = await prisma.project.findUnique({
             where: { id },
             include: { waypoints: { orderBy: { order: 'asc' } } }
         });
 
-        if (!project) return NOT_FOUND;
+        if (!project) return notFound();
         return NextResponse.json(project);
     } catch (error) {
         console.error('API Error in GET /projects/[id]:', error);
@@ -492,7 +495,7 @@ export async function PUT(
     }
 
     try {
-        if (!(await authorize(id))) return NOT_FOUND;
+        if (!(await authorize(id))) return notFound();
 
         await prisma.$transaction([
             prisma.waypoint.deleteMany({ where: { projectId: id } }),
@@ -521,11 +524,11 @@ export async function DELETE(
 
     try {
         const ownerId = await getOwnerId();
-        if (!ownerId) return NOT_FOUND;
+        if (!ownerId) return notFound();
 
         // Scoping the delete to the owner makes the check and the write atomic.
         const { count } = await prisma.project.deleteMany({ where: { id, ownerId } });
-        if (count === 0) return NOT_FOUND;
+        if (count === 0) return notFound();
 
         return NextResponse.json({ success: true });
     } catch (error) {

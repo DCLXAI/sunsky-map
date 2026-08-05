@@ -79,7 +79,7 @@ export default function LandingPage() {
                     fill
                     priority
                     sizes="100vw"
-                    className="object-cover"
+                    className="object-cover hero-drift"
                 />
                 <div className="absolute inset-0 bg-black/75" />
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.85)_70%)]" />

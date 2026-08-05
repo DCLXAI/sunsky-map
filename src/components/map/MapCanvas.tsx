@@ -80,6 +80,9 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
     const animationFrameRef = useRef<number | undefined>(undefined);
     const lastBearingRef = useRef(0);
     const [isMapLoaded, setIsMapLoaded] = useState(false);
+    // Lets the style.load handler, which is registered once at mount, reach the
+    // current updateMapData without capturing a stale closure.
+    const redrawRef = useRef<() => void>(() => { });
     const { waypoints, isPlaying, setPlaying, mapStyle } = useEditorStore();
 
     // Helper: Lerp Angle (handles 360 wrap)
@@ -240,40 +243,52 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
             console.error("Mapbox error:", e.error ?? e);
         });
 
-        mapRefInternal.current.on("load", () => {
-            initLayers(mapRefInternal.current!);
+        // `style.load`, not `load`: adding sources and layers only needs the
+        // style, whereas `load` additionally waits for a first visually
+        // complete frame — which never arrives in a throttled or hidden tab,
+        // leaving the route and markers permanently undrawn. This also matches
+        // what the style-change handler below already does.
+        // Registered once, outside the style handler below: `style.load` fires
+        // again on every style change, and re-registering here would add a
+        // duplicate waypoint per click.
+        mapRefInternal.current.on("click", async (e) => {
+            if (useEditorStore.getState().isPlaying) return;
+            const { lng, lat } = e.lngLat;
 
-            // Interactions
-            mapRefInternal.current!.on("click", async (e) => {
-                if (useEditorStore.getState().isPlaying) return;
-                const { lng, lat } = e.lngLat;
-
-                let name = "Stop";
-                let emoji = "🏳️"; // Default to flag-ish if country unknown
-                try {
-                    const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}&types=place,country&limit=1`);
-                    const data: { features?: GeocodingFeature[] } = await res.json();
-                    if (data.features && data.features.length > 0) {
-                        const feature = data.features[0];
-                        name = feature.text;
-                        const countryContext = feature.context?.find((c) => c.id.startsWith('country'));
-                        if (countryContext?.short_code) {
-                            emoji = getFlagEmoji(countryContext.short_code);
-                        } else if (feature.properties?.short_code) {
-                            emoji = getFlagEmoji(feature.properties.short_code);
-                        }
+            let name = "Stop";
+            let emoji = "🏳️"; // Default to flag-ish if country unknown
+            try {
+                const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}&types=place,country&limit=1`);
+                const data: { features?: GeocodingFeature[] } = await res.json();
+                if (data.features && data.features.length > 0) {
+                    const feature = data.features[0];
+                    name = feature.text;
+                    const countryContext = feature.context?.find((c) => c.id.startsWith('country'));
+                    if (countryContext?.short_code) {
+                        emoji = getFlagEmoji(countryContext.short_code);
+                    } else if (feature.properties?.short_code) {
+                        emoji = getFlagEmoji(feature.properties.short_code);
                     }
-                } catch (err) {
-                    console.error("Reverse geocoding failed:", err);
                 }
+            } catch (err) {
+                console.error("Reverse geocoding failed:", err);
+            }
 
-                useEditorStore.getState().addWaypoint({
-                    id: crypto.randomUUID(),
-                    name: name, lat, lng, transport: "plane", emoji
-                });
+            useEditorStore.getState().addWaypoint({
+                id: crypto.randomUUID(),
+                name: name, lat, lng, transport: "plane", emoji
             });
+        });
 
+        // Fires on first load and again after every setStyle, which wipes all
+        // custom sources and layers — so this is also the style-change repair.
+        mapRefInternal.current.on("style.load", () => {
+            initLayers(mapRefInternal.current!);
             setIsMapLoaded(true);
+            // Re-push the route data a style change discarded. On the very
+            // first load this is a no-op — isMapLoaded is still false — and the
+            // data effect covers it once that state lands.
+            redrawRef.current();
         });
 
         return () => {
@@ -359,7 +374,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
     const lastStyleRef = useRef(mapStyle);
 
-    // 2. Handle Style Change (with layer restore)
+    // 2. Handle Style Change. Rebuilding the layers afterwards is the
+    // `style.load` handler's job, so this only has to swap the style.
     useEffect(() => {
         if (!mapRefInternal.current || !isMapLoaded) return;
         const map = mapRefInternal.current;
@@ -368,12 +384,12 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
         if (mapStyle !== lastStyleRef.current) {
             lastStyleRef.current = mapStyle;
             map.setStyle(mapStyle);
-            map.once('style.load', () => {
-                initLayers(map);
-                updateMapData();
-            });
         }
-    }, [mapStyle, isMapLoaded, updateMapData]);
+    }, [mapStyle, isMapLoaded]);
+
+    useEffect(() => {
+        redrawRef.current = updateMapData;
+    }, [updateMapData]);
 
     // 3. Data Sync & Smart Routing (Async)
     useEffect(() => {

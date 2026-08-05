@@ -86,10 +86,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
     // Imperative Handle for Export
     useImperativeHandle(mapRef, () => {
-        console.log("MapCanvas: imperative handle attached");
         return {
             captureStream: () => {
-                console.log("MapCanvas: captureStream called");
                 const canvas = mapContainer.current?.querySelector("canvas");
                 if (!canvas) {
                     console.error("MapCanvas: No canvas found for captureStream");

@@ -78,7 +78,6 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
     }, [projectId, setProjectTitle, setWaypoints, t]);
 
     const handleSave = async () => {
-        console.log("Saving project...");
         setIsSaving(true);
         try {
             const res = await fetch(`/api/projects/${projectId}`, {
@@ -88,7 +87,6 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
             });
             if (res.ok) {
                 toast.success(t("Project saved successfully!"));
-                console.log("Save success");
             } else {
                 throw new Error("API Error");
             }
@@ -115,7 +113,6 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
     };
 
     const handleExport = async () => {
-        console.log("Export requested. MapRef:", mapRef.current);
         if (!mapRef.current) {
             toast.error(t("Map is not ready yet."));
             return;
@@ -128,7 +125,6 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
         }
 
         const mimeType = getSupportedMimeType();
-        console.log("Selected MIME Type:", mimeType);
 
         if (!mimeType) {
             toast.error(t("No supported video format found in this browser."));
@@ -140,7 +136,6 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
 
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
-            console.log("Recording stopped. Exporting...");
             const blob = new Blob(chunks, { type: mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');

@@ -16,6 +16,9 @@ const TRANSPORT_MODES = ['plane', 'car', 'train', 'walk'] as const;
 type TransportMode = (typeof TRANSPORT_MODES)[number];
 
 interface ParsedWaypoint {
+    /** The client's idea of this stop's identity. Only honoured when it names
+     *  a waypoint already belonging to this project. */
+    id: string | null;
     name: string;
     lat: number;
     lng: number;
@@ -30,13 +33,14 @@ function parseWaypoints(input: unknown): ParsedWaypoint[] | null {
     const parsed: ParsedWaypoint[] = [];
     for (const wp of input) {
         if (typeof wp !== 'object' || wp === null) return null;
-        const { name, lat, lng, transport, emoji } = wp as Record<string, unknown>;
+        const { id, name, lat, lng, transport, emoji } = wp as Record<string, unknown>;
 
         if (typeof name !== 'string') return null;
         if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) return null;
         if (typeof lng !== 'number' || !Number.isFinite(lng)) return null;
 
         parsed.push({
+            id: typeof id === 'string' && id ? id : null,
             name,
             lat,
             lng,
@@ -121,18 +125,47 @@ export async function PUT(
     try {
         if (!(await authorize(id))) return notFound();
 
+        // Reconcile against what is already stored instead of deleting every
+        // waypoint and recreating it. Recreating hands out new ids on every
+        // save, which would break anything later attached to a stop — a photo,
+        // a note, a share link.
+        const existing = await prisma.waypoint.findMany({
+            where: { projectId: id },
+            select: { id: true },
+        });
+        // Only ids that genuinely belong to this project may be updated; an id
+        // from somewhere else is treated as a new stop rather than a write into
+        // another project's row.
+        const ownIds = new Set(existing.map((wp) => wp.id));
+
+        const seen = new Set<string>();
+        const toUpdate: { id: string; data: Omit<ParsedWaypoint, 'id'> & { order: number } }[] = [];
+        const toCreate: (Omit<ParsedWaypoint, 'id'> & { order: number; projectId: string })[] = [];
+
+        waypoints.forEach((wp, order) => {
+            const { id: clientId, ...fields } = wp;
+            // A duplicated id must not update the same row twice.
+            if (clientId && ownIds.has(clientId) && !seen.has(clientId)) {
+                seen.add(clientId);
+                toUpdate.push({ id: clientId, data: { ...fields, order } });
+            } else {
+                toCreate.push({ ...fields, order, projectId: id });
+            }
+        });
+
+        const removed = [...ownIds].filter((wpId) => !seen.has(wpId));
+
         await prisma.$transaction([
-            prisma.waypoint.deleteMany({ where: { projectId: id } }),
-            prisma.project.update({
-                where: { id },
-                data: {
-                    title,
-                    waypoints: {
-                        create: waypoints.map((wp, index) => ({ ...wp, order: index }))
-                    }
-                }
-            })
+            ...(removed.length
+                ? [prisma.waypoint.deleteMany({ where: { projectId: id, id: { in: removed } } })]
+                : []),
+            ...toUpdate.map((wp) =>
+                prisma.waypoint.update({ where: { id: wp.id }, data: wp.data })
+            ),
+            ...(toCreate.length ? [prisma.waypoint.createMany({ data: toCreate })] : []),
+            prisma.project.update({ where: { id }, data: { title } }),
         ]);
+
         return json({ success: true });
     } catch (error) {
         console.error('API Error in PUT /projects/[id]:', error);

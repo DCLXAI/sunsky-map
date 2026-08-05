@@ -7,6 +7,7 @@ import * as turf from "@turf/turf";
 import type { Feature, FeatureCollection, LineString, Point, Position } from "geojson";
 import { useEditorStore } from "@/lib/store";
 import { getFlagEmoji, generateSmartRoute } from "@/lib/map-utils";
+import { buildPathData } from "@/lib/animation";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
@@ -370,53 +371,10 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
     // 4. Animation Loop Logic (Vertex-Walker Engine v1.0)
     // --- OPTIMIZATION: Memoize Path Data ---
-    const pathData = React.useMemo(() => {
-        if (routePath.length < 2) return null;
-
-        // 1. Base Line
-        let baseLine: Feature<LineString>;
-        try { baseLine = turf.lineString(routePath); } catch { return null; }
-        const totalLen = turf.length(baseLine);
-
-        // 2. Interpolated Path (High-Res)
-        const stepSize = 5;
-        const totalSteps = Math.ceil(totalLen / stepSize);
-        const interpolatedPath: [number, number][] = [];
-
-        for (let i = 0; i <= totalSteps; i++) {
-            const dist = (i / totalSteps) * totalLen;
-            const pt = turf.along(baseLine, dist);
-            interpolatedPath.push(pt.geometry.coordinates as [number, number]);
-        }
-
-        // 3. Timing Data (Robust Cumulative)
-        const waypointDistances = [0];
-        let runningDist = 0;
-        let lastIndex = 0;
-
-        for (let i = 1; i < waypoints.length; i++) {
-            const target = turf.point([waypoints[i].lng, waypoints[i].lat]);
-            let bestIdx = lastIndex;
-            let minD = Infinity;
-
-            for (let j = lastIndex; j < routePath.length; j++) {
-                const d = turf.distance(target, turf.point(routePath[j]));
-                if (d < minD) { minD = d; bestIdx = j; }
-            }
-
-            const segmentCoords = routePath.slice(lastIndex, bestIdx + 1);
-            if (segmentCoords.length > 1) {
-                runningDist += turf.length(turf.lineString(segmentCoords));
-            }
-            waypointDistances.push(runningDist);
-            lastIndex = bestIdx;
-        }
-
-        const segmentDuration = 2500;
-        const totalDuration = (waypoints.length - 1) * segmentDuration;
-
-        return { baseLine, totalLen, interpolatedPath, waypointDistances, totalDuration, segmentDuration };
-    }, [routePath, waypoints]);
+    const pathData = React.useMemo(
+        () => buildPathData(routePath, waypoints),
+        [routePath, waypoints]
+    );
 
     // 4. Animation Loop
     useEffect(() => {

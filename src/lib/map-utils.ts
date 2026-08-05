@@ -73,19 +73,33 @@ export const generateSmartRoute = async (waypoints: Waypoint[]) => {
     return fixDatelineCrossing(coords);
 };
 
-// Helper: Ensure Longitude Continuity (Global Unwrap)
-export const fixDatelineCrossing = (coords: number[][]) => {
+/**
+ * Unwraps longitudes so no two consecutive points jump more than 180°.
+ *
+ * Without this, a route crossing the antimeridian (179° → -179°) reads as a
+ * near-complete trip the wrong way around the planet, and the line is drawn
+ * straight across the whole map.
+ *
+ * Returns a new array — callers cache the result, so mutating in place would
+ * corrupt anything already holding it.
+ */
+export const fixDatelineCrossing = (coords: Position[]): Position[] => {
+    if (coords.length === 0) return [];
+
+    const out: Position[] = [[...coords[0]]];
+
     for (let i = 1; i < coords.length; i++) {
-        const prevLon = coords[i - 1][0];
+        const prevLon = out[i - 1][0];
         let currLon = coords[i][0];
 
         let diff = currLon - prevLon;
         while (diff > 180) { currLon -= 360; diff -= 360; }
         while (diff < -180) { currLon += 360; diff += 360; }
 
-        coords[i][0] = currLon;
+        out.push([currLon, ...coords[i].slice(1)]);
     }
-    return coords;
+
+    return out;
 };
 
 export const getFlagEmoji = (countryCode: string) => {

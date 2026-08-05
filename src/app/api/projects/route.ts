@@ -2,9 +2,19 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOwnerId } from '@/lib/owner-server';
 
+// Every response here is scoped to the caller's bearer cookie. `private,
+// no-store` keeps that invisible to shared caches — route every return
+// through this instead of calling NextResponse.json directly, so the header
+// can never be forgotten at a call site.
+function json(body: unknown, init?: ResponseInit) {
+    const response = NextResponse.json(body, init);
+    response.headers.set('Cache-Control', 'private, no-store');
+    return response;
+}
+
 export async function GET() {
     const ownerId = await getOwnerId();
-    if (!ownerId) return NextResponse.json({ error: 'Missing owner' }, { status: 401 });
+    if (!ownerId) return json({ error: 'Missing owner' }, { status: 401 });
 
     try {
         const projects = await prisma.project.findMany({
@@ -12,16 +22,16 @@ export async function GET() {
             orderBy: { updatedAt: 'desc' },
             select: { id: true, title: true, updatedAt: true }
         });
-        return NextResponse.json(projects);
+        return json(projects);
     } catch (error) {
         console.error('API Error in GET /projects:', error);
-        return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
+        return json({ error: 'Failed to fetch projects' }, { status: 500 });
     }
 }
 
 export async function POST() {
     const ownerId = await getOwnerId();
-    if (!ownerId) return NextResponse.json({ error: 'Missing owner' }, { status: 401 });
+    if (!ownerId) return json({ error: 'Missing owner' }, { status: 401 });
 
     try {
         const project = await prisma.project.create({
@@ -39,9 +49,9 @@ export async function POST() {
             // credential kept in an httpOnly cookie for a reason.
             select: { id: true, title: true, updatedAt: true }
         });
-        return NextResponse.json(project);
+        return json(project);
     } catch (error) {
         console.error('API Error in POST /projects:', error);
-        return NextResponse.json({ error: 'Creation failed' }, { status: 500 });
+        return json({ error: 'Creation failed' }, { status: 500 });
     }
 }

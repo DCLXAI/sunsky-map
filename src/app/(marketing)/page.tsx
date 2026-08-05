@@ -83,7 +83,7 @@ export default function LandingPage() {
 
             {/* Hero Section */}
             <div className="relative z-10 flex flex-col items-center justify-center min-h-[85vh] px-4 overflow-hidden">
-                {/* Background Effects (kept for atmosphere over map) */}
+                {/* Background Effects (kept for atmosphere over the static poster) */}
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent z-0 pointer-events-none" />
                 <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50" />
 

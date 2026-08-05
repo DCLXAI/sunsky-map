@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOwnerId } from '@/lib/owner-server';
 
+// Every response here is scoped to the caller's bearer cookie. `private,
+// no-store` keeps that invisible to shared caches — route every return
+// through this instead of calling NextResponse.json directly, so the header
+// can never be forgotten at a call site.
+function json(body: unknown, init?: ResponseInit) {
+    const response = NextResponse.json(body, init);
+    response.headers.set('Cache-Control', 'private, no-store');
+    return response;
+}
+
 const TRANSPORT_MODES = ['plane', 'car', 'train', 'walk'] as const;
 type TransportMode = (typeof TRANSPORT_MODES)[number];
 
@@ -42,7 +52,7 @@ function parseWaypoints(input: unknown): ParsedWaypoint[] | null {
 // A factory, not a constant: a Response body is a stream that can only be
 // piped once, so a shared instance sends an empty body on its second use and
 // throws "ReadableStream is locked" when two denials overlap.
-const notFound = () => NextResponse.json({ error: 'Not found' }, { status: 404 });
+const notFound = () => json({ error: 'Not found' }, { status: 404 });
 
 /** Resolves the caller's owner id, or null when they may not touch this project.
  *  A project owned by someone else is reported as absent, not forbidden. */
@@ -81,10 +91,10 @@ export async function GET(
         });
 
         if (!project) return notFound();
-        return NextResponse.json(project);
+        return json(project);
     } catch (error) {
         console.error('API Error in GET /projects/[id]:', error);
-        return NextResponse.json({ error: 'Failed to fetch project' }, { status: 500 });
+        return json({ error: 'Failed to fetch project' }, { status: 500 });
     }
 }
 
@@ -98,14 +108,14 @@ export async function PUT(
     try {
         body = await request.json();
     } catch {
-        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+        return json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
     const title = typeof body.title === 'string' && body.title.trim() ? body.title : 'My Journey';
     const waypoints = parseWaypoints(body.waypoints);
 
     if (!waypoints) {
-        return NextResponse.json({ error: 'Invalid waypoints payload' }, { status: 400 });
+        return json({ error: 'Invalid waypoints payload' }, { status: 400 });
     }
 
     try {
@@ -123,10 +133,10 @@ export async function PUT(
                 }
             })
         ]);
-        return NextResponse.json({ success: true });
+        return json({ success: true });
     } catch (error) {
         console.error('API Error in PUT /projects/[id]:', error);
-        return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+        return json({ error: 'Update failed' }, { status: 500 });
     }
 }
 
@@ -144,9 +154,9 @@ export async function DELETE(
         const { count } = await prisma.project.deleteMany({ where: { id, ownerId } });
         if (count === 0) return notFound();
 
-        return NextResponse.json({ success: true });
+        return json({ success: true });
     } catch (error) {
         console.error('API Error in DELETE /projects/[id]:', error);
-        return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
+        return json({ error: 'Delete failed' }, { status: 500 });
     }
 }

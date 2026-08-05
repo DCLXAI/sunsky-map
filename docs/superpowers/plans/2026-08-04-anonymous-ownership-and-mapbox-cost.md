@@ -28,7 +28,7 @@
 | `src/lib/owner-server.ts` | Create | `getOwnerId()` for route handlers, reads the header via `next/headers` |
 | `src/middleware.ts` | Create | Mints and republishes the owner id |
 | `prisma/schema.prisma` | Modify | Adds `ownerId` and its index to `Project` |
-| `prisma/migrations/<ts>_add_project_owner/migration.sql` | Create | Clears the orphan row, then adds the NOT NULL column and index |
+| `prisma/migrations/<ts>_add_project_owner/migration.sql` | Create | Backfills the orphan row with `ownerId = ''`, then adds the NOT NULL column and index |
 | `src/app/api/projects/route.ts` | Modify | Filters the list and stamps new projects |
 | `src/app/api/projects/[id]/route.ts` | Modify | Ownership gate on GET, PUT, DELETE |
 | `src/app/(marketing)/page.tsx` | Modify | Live map background → `<video>` + poster |
@@ -195,7 +195,10 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 export function middleware(request: NextRequest) {
     const existing = request.cookies.get(OWNER_COOKIE)?.value;
-    const ownerId = existing ?? createOwnerId();
+    // `||`, not `??`: an empty-string cookie is falsy under `||` and gets replaced,
+    // whereas `??` only catches null/undefined and would let an empty cookie mint
+    // an empty owner id, permanently locking that visitor out.
+    const ownerId = existing || createOwnerId();
 
     // `set`, never `append`: this overwrites any x-sunsky-owner header the
     // client tried to forge, so the cookie is the only source of identity.
@@ -408,7 +411,10 @@ export async function POST() {
                         { order: 1, name: 'Tokyo', lat: 35.6762, lng: 139.6503, transport: 'plane', emoji: '🇯🇵' }
                     ]
                 }
-            }
+            },
+            // Never serialise ownerId back to the client — it is a bearer
+            // credential kept in an httpOnly cookie for a reason.
+            select: { id: true, title: true, updatedAt: true }
         });
         return NextResponse.json(project);
     } catch (error) {
@@ -463,7 +469,15 @@ export async function GET(
 
         const project = await prisma.project.findUnique({
             where: { id },
-            include: { waypoints: { orderBy: { order: 'asc' } } }
+            // Never serialise ownerId back to the client — it is a bearer
+            // credential kept in an httpOnly cookie for a reason.
+            select: {
+                title: true,
+                waypoints: {
+                    orderBy: { order: 'asc' },
+                    select: { id: true, name: true, lat: true, lng: true, transport: true, emoji: true }
+                }
+            }
         });
 
         if (!project) return notFound();
@@ -583,6 +597,12 @@ git commit -m "Scope every project query to the requesting visitor"
 ---
 
 ### Task 5: Produce the landing background assets
+
+> **What actually happened:** video capture was attempted and then abandoned, exactly as
+> the fallback below anticipated. `public/demo-poster.jpg` was produced and shipped;
+> `public/demo.webm` was never produced, and the capture apparatus (`/dev/capture` and its
+> API route) was deleted per Step 7 without a video ever coming out of it. The steps below
+> are kept as a historical record of what was tried.
 
 **Files:**
 - Create: `public/demo-poster.jpg`
@@ -763,6 +783,12 @@ git commit -m "Add pre-rendered landing background assets"
 
 ### Task 6: Replace the landing page's live map
 
+> **What actually happened:** no `demo.webm` was ever produced (see Task 5), so the
+> `<video>` markup below was not what shipped. The landing page instead renders a Next
+> `<Image fill priority sizes="100vw" className="object-cover">` pointing at
+> `/demo-poster.jpg`, under a strengthened `bg-black/75` scrim plus a radial vignette. The
+> steps below are kept as a historical record of what was planned.
+
 **Files:**
 - Modify: `src/app/(marketing)/page.tsx`
 - Modify: `src/components/map/MapCanvas.tsx`
@@ -919,7 +945,7 @@ Also report whether `public/demo.webm` was produced or the landing page is runni
 | List filtered by owner | 4 |
 | `POST` stamps owner | 4 |
 | `GET`/`PUT`/`DELETE` return 404 on mismatch | 4 |
-| Orphan row deleted, `ownerId` NOT NULL | 3 |
+| Orphan row backfilled with `ownerId = ''` (unreachable, not deleted), `ownerId` NOT NULL | 3 |
 | Landing map → video + poster | 6 |
 | Demo-store side effect removed | 6 |
 | Poster guaranteed, video best-effort | 5 |

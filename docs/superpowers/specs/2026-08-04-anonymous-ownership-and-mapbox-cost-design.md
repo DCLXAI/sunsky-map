@@ -1,7 +1,7 @@
 # Anonymous project ownership and Mapbox cost protection
 
 Date: 2026-08-04
-Status: approved, not yet implemented
+Status: implemented and deployed
 
 ## Problem
 
@@ -94,9 +94,12 @@ destroyed, and stays recoverable if its owner is ever identified.
 
 ### Landing page
 
-`MapCanvas` is replaced with `<video autoplay muted loop playsinline poster={...}>`. Map
+`MapCanvas` is replaced with a Next `<Image fill priority sizes="100vw" className="object-cover">`
+pointing at `/demo-poster.jpg`, layered under a strengthened `bg-black/75` scrim plus a
+radial vignette. The video fallback anticipated below was exercised: capture was attempted
+and abandoned, so no video ships and the landing background is the static poster alone. Map
 loads attributable to landing traffic drop to zero, and mobile devices stop paying for a
-WebGL context they only ever see behind a dark overlay.
+WebGL context they only ever saw behind a dark overlay.
 
 Deleting the demo block also removes a latent bug: the landing page currently writes demo
 waypoints into the shared editor store, so navigating landing → editor briefly shows
@@ -131,7 +134,13 @@ entry, and the Google login spec is what resolves it.
 ## Error handling
 
 - Middleware guarantees the cookie exists, so route handlers treat a missing owner id as a
-  server-side invariant violation and return 401 rather than silently creating data.
+  server-side invariant violation. `GET /api/projects` and `POST /api/projects` return 401
+  in that case rather than silently creating or listing data.
+- `/api/projects/[id]`'s `GET`, `PUT` and `DELETE` instead return **404** for a missing
+  owner id, exactly as they do for a foreign or absent project — a missing identity, a
+  missing project, and a foreign project all take the same path. This is deliberate: it
+  gives no existence oracle, whereas a 401 there would confirm the id is well-formed enough
+  to be worth authenticating against.
 - Ownership checks read the project first and compare `ownerId`; a missing project and a
   foreign project take the same 404 path.
 - The existing payload validation on `PUT` is unchanged.

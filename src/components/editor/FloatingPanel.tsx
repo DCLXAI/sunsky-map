@@ -15,6 +15,13 @@ interface GeocodingFeature {
     context?: { id: string, short_code?: string }[];
 }
 
+const TRANSPORT_LABELS: Record<TransportMode, string> = {
+    plane: 'Plane',
+    car: 'Car',
+    train: 'Train',
+    walk: 'Walk',
+};
+
 interface GeneratedWaypoint {
     name: string;
     lat: number;
@@ -41,7 +48,7 @@ export default function FloatingPanel() {
     const handleAiGenerate = async () => {
         if (!aiPrompt.trim()) return;
         setIsGenerating(true);
-        const toastId = toast.loading("Generating route with Gemini...");
+        const toastId = toast.loading(t("Generating route with Gemini..."));
 
         try {
             const res = await fetch('/api/ai/generate', {
@@ -66,17 +73,17 @@ export default function FloatingPanel() {
                 setAiPrompt('');
                 // Default to 'follow' view for new route
                 setCameraView('follow');
-                toast.success("Route generated successfully!", { id: toastId });
+                toast.success(t("Route generated successfully!"), { id: toastId });
             } else {
                 // Show specific error from backend if available
-                toast.error(data.error || "Failed to generate route. Please try again.", {
+                toast.error(data.error || t("Failed to generate route. Please try again."), {
                     id: toastId,
                     duration: 5000 // Show for longer so user can read
                 });
             }
         } catch (e) {
             console.error(e);
-            toast.error("Error generating route", { id: toastId });
+            toast.error(t("Error generating route"), { id: toastId });
         } finally {
             setIsGenerating(false);
         }
@@ -152,14 +159,14 @@ export default function FloatingPanel() {
             {/* 1. Project Title */}
             <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-white/20">
                 <Link href="/" className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100 cursor-pointer hover:opacity-75 transition-opacity">
-                    <span className="text-2xl">🌥️</span>
+                    <span className="text-2xl" aria-hidden="true">🌥️</span>
                     <span className="font-black text-lg bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
                         Sunsky.ai
                     </span>
                 </Link>
                 <div className="group relative">
                     <input
-                        placeholder="Trip Title..."
+                        placeholder={t("Trip Title...")}
                         value={projectTitle}
                         onChange={(e) => setProjectTitle(e.target.value)}
                         className="w-full text-lg font-bold bg-transparent outline-none border-b border-transparent focus:border-blue-500 transition-all text-gray-800 placeholder-gray-400 pb-1"
@@ -168,17 +175,20 @@ export default function FloatingPanel() {
             </div>
 
             {/* AI Assistant Toggle */}
-            {/* AI Assistant Toggle */}
             <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-white/20 transition-all">
                 <button
                     onClick={() => setShowAi(!showAi)}
+                    aria-expanded={showAi}
+                    aria-label={t("Toggle AI route assistant")}
                     className="w-full p-4 flex items-center justify-between text-left hover:bg-blue-50/50 transition-colors rounded-2xl"
                 >
                     <span className="font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600 flex items-center gap-2">
-                        <Sparkles size={18} className="text-purple-500" />
-                        AI Route Assistant
+                        <Sparkles size={18} className="text-purple-500" aria-hidden="true" />
+                        {t("AI Route Assistant")}
                     </span>
-                    {showAi ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                    {showAi
+                        ? <ChevronUp size={18} className="text-gray-400" aria-hidden="true" />
+                        : <ChevronDown size={18} className="text-gray-400" aria-hidden="true" />}
                 </button>
 
                 {showAi && (
@@ -192,7 +202,8 @@ export default function FloatingPanel() {
                                     handleAiGenerate();
                                 }
                             }}
-                            placeholder="e.g. I want to travel from Seoul to Tokyo, then fly to Paris and finish in New York. (Press Enter)"
+                            placeholder={t("e.g. I want to travel from Seoul to Tokyo, then fly to Paris and finish in New York. (Press Enter)")}
+                            aria-label={t("AI Route Assistant")}
                             className="w-full text-sm p-3 bg-gray-50 rounded-xl border border-gray-100 focus:border-purple-300 focus:ring-2 ring-purple-100 outline-none resize-none h-24 placeholder-gray-400 text-gray-700"
                             autoFocus
                         />
@@ -201,8 +212,10 @@ export default function FloatingPanel() {
                             disabled={isGenerating || !aiPrompt.trim()}
                             className="w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-xl text-sm shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                         >
-                            {isGenerating ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                            {isGenerating ? 'Generating Magic...' : 'Generate Route'}
+                            {isGenerating
+                                ? <Loader2 className="animate-spin" size={16} aria-hidden="true" />
+                                : <Sparkles size={16} aria-hidden="true" />}
+                            {isGenerating ? t('Generating Magic...') : t('Generate Route')}
                         </button>
                     </div>
                 )}
@@ -280,12 +293,14 @@ export default function FloatingPanel() {
                         <button
                             key={s.id}
                             onClick={() => setMapStyle(s.style)}
+                            // Selection is otherwise conveyed by colour alone.
+                            aria-pressed={mapStyle === s.style}
                             className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${mapStyle === s.style
                                 ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-inner'
                                 : 'bg-transparent border-transparent hover:bg-gray-100 text-gray-500'
                                 }`}
                         >
-                            <span className="text-xl">{s.icon}</span>
+                            <span className="text-xl" aria-hidden="true">{s.icon}</span>
                             <span className="text-[10px] font-bold">{t(s.name)}</span>
                         </button>
                     ))}
@@ -303,12 +318,13 @@ export default function FloatingPanel() {
                         <button
                             key={c.id}
                             onClick={() => setCameraView(c.id)}
+                            aria-pressed={cameraView === c.id}
                             className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${cameraView === c.id
                                 ? 'bg-indigo-50 border-indigo-500 text-indigo-600 shadow-inner'
                                 : 'bg-transparent border-transparent hover:bg-gray-100 text-gray-500'
                                 }`}
                         >
-                            <span className="text-xl">{c.icon}</span>
+                            <span className="text-xl" aria-hidden="true">{c.icon}</span>
                             <span className="text-[10px] font-bold">{t(c.name)}</span>
                         </button>
                     ))}
@@ -331,8 +347,12 @@ export default function FloatingPanel() {
                                                     }`}
                                             >
                                                 <div className="flex items-center gap-2 mb-2">
-                                                    <div {...provided.dragHandleProps} className="text-gray-300 cursor-grab hover:text-gray-500">
-                                                        <GripVertical size={16} />
+                                                    <div
+                                                        {...provided.dragHandleProps}
+                                                        aria-label={`${t("Reorder this stop")}: ${wp.name}`}
+                                                        className="text-gray-300 cursor-grab hover:text-gray-500"
+                                                    >
+                                                        <GripVertical size={16} aria-hidden="true" />
                                                     </div>
 
                                                     {/* Emoji Input */}
@@ -343,9 +363,13 @@ export default function FloatingPanel() {
                                                             onChange={(e) => updateWaypoint(wp.id, { emoji: e.target.value })}
                                                             placeholder="📍"
                                                             maxLength={2}
+                                                            aria-label={`${t("Change Emoji")}: ${wp.name}`}
                                                         />
-                                                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] bg-black text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                                                            Change Emoji
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] bg-black text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10"
+                                                        >
+                                                            {t("Change Emoji")}
                                                         </span>
                                                     </div>
 
@@ -353,10 +377,15 @@ export default function FloatingPanel() {
                                                         value={wp.name}
                                                         onChange={(e) => updateWaypoint(wp.id, { name: e.target.value })}
                                                         className="font-bold text-gray-700 w-full outline-none bg-transparent text-sm ml-1 border-b border-transparent focus:border-blue-200 px-1"
-                                                        placeholder="City Name"
+                                                        placeholder={t("City Name")}
+                                                        aria-label={t("City Name")}
                                                     />
-                                                    <button onClick={() => removeWaypoint(wp.id)} className="text-gray-300 hover:text-red-500 p-1 rounded-md transition-colors">
-                                                        <Trash2 size={14} />
+                                                    <button
+                                                        onClick={() => removeWaypoint(wp.id)}
+                                                        aria-label={`${t("Remove this stop")}: ${wp.name}`}
+                                                        className="text-gray-300 hover:text-red-500 p-1 rounded-md transition-colors"
+                                                    >
+                                                        <Trash2 size={14} aria-hidden="true" />
                                                     </button>
                                                 </div>
 
@@ -365,16 +394,17 @@ export default function FloatingPanel() {
                                                         <button
                                                             key={mode}
                                                             onClick={() => updateWaypoint(wp.id, { transport: mode })}
+                                                            aria-pressed={wp.transport === mode}
                                                             className={`p-1.5 rounded-lg transition-all text-[10px] font-medium flex items-center gap-1 ${wp.transport === mode
                                                                 ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
                                                                 : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
                                                                 }`}
                                                         >
-                                                            {mode === 'plane' && <Plane size={10} />}
-                                                            {mode === 'car' && <Car size={10} />}
-                                                            {mode === 'train' && <Train size={10} />}
-                                                            {mode === 'walk' && <Footprints size={10} />}
-                                                            <span className="capitalize">{mode}</span>
+                                                            {mode === 'plane' && <Plane size={10} aria-hidden="true" />}
+                                                            {mode === 'car' && <Car size={10} aria-hidden="true" />}
+                                                            {mode === 'train' && <Train size={10} aria-hidden="true" />}
+                                                            {mode === 'walk' && <Footprints size={10} aria-hidden="true" />}
+                                                            <span>{t(TRANSPORT_LABELS[mode])}</span>
                                                         </button>
                                                     ))}
                                                 </div>
@@ -390,7 +420,7 @@ export default function FloatingPanel() {
 
                 {waypoints.length === 0 && (
                     <div className="text-center py-10 text-gray-400 text-sm">
-                        Start your journey by<br />searching for a city above.
+                        {t("Start your journey by searching for a city above.")}
                     </div>
                 )}
             </div>

@@ -184,9 +184,10 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
             <div className="absolute top-4 right-4 flex gap-3 z-20">
                 <button
                     onClick={() => setLanguage(language === 'en' ? 'ko' : 'en')}
+                    aria-label={t("Switch language")}
                     className="h-10 px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
                 >
-                    <span className="text-lg">{language === 'en' ? '🇰🇷' : '🇺🇸'}</span>
+                    <span className="text-lg" aria-hidden="true">{language === "en" ? "🇰🇷" : "🇺🇸"}</span>
                     <span className="hidden sm:inline">{language === 'en' ? 'KO' : 'EN'}</span>
                 </button>
 
@@ -195,7 +196,7 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
                     disabled={isSaving}
                     className="h-10 px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
                 >
-                    {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                    {isSaving ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
                     <span className="hidden sm:inline">{t("Save")}</span>
                 </button>
 
@@ -204,7 +205,7 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
                     disabled={isExporting}
                     className="h-10 px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
                 >
-                    {isPlaying ? <X size={16} /> : <Play size={16} fill="currentColor" />}
+                    {isPlaying ? <X size={16} aria-hidden="true" /> : <Play size={16} fill="currentColor" aria-hidden="true" />}
                     <span className="hidden sm:inline">{isPlaying ? t('Stop') : t('Preview')}</span>
                 </button>
 

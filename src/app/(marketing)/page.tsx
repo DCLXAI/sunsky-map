@@ -2,7 +2,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2 } from "lucide-react";
+import { useEditorStore } from "@/lib/store";
+import { useTranslation } from "@/lib/i18n";
 
 interface ProjectSummary {
     id: string;
@@ -12,6 +14,8 @@ interface ProjectSummary {
 
 export default function LandingPage() {
     const router = useRouter();
+    const { t, language } = useTranslation();
+    const setLanguage = useEditorStore((s) => s.setLanguage);
     const [loading, setLoading] = useState(false);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
@@ -38,7 +42,7 @@ export default function LandingPage() {
             throw new Error(data.error ?? 'Unknown error');
         } catch (err) {
             console.error(err);
-            alert("Error creating project");
+            alert(t("Error creating project"));
             setLoading(false);
         }
     };
@@ -60,7 +64,7 @@ export default function LandingPage() {
             fetchProjects(); // Refresh list
         } catch (err) {
             console.error(err);
-            alert("Failed to delete project");
+            alert(t("Failed to delete project"));
         }
     };
 
@@ -81,6 +85,17 @@ export default function LandingPage() {
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.85)_70%)]" />
             </div>
 
+            {/* Language toggle — the editor has one, so the landing page needs
+                one too or a Korean visitor has no way to switch. */}
+            <button
+                onClick={() => setLanguage(language === 'en' ? 'ko' : 'en')}
+                aria-label={t("Switch language")}
+                className="absolute top-4 right-4 z-20 h-10 px-4 bg-white/10 hover:bg-white/20 backdrop-blur rounded-xl border border-white/10 flex items-center gap-2 text-sm font-bold text-white transition-colors"
+            >
+                <span className="text-lg" aria-hidden="true">{language === 'en' ? '🇰🇷' : '🇺🇸'}</span>
+                {language === 'en' ? 'KO' : 'EN'}
+            </button>
+
             {/* Hero Section */}
             <div className="relative z-10 flex flex-col items-center justify-center min-h-[85vh] px-4 overflow-hidden">
                 {/* Background Effects (kept for atmosphere over the static poster) */}
@@ -93,7 +108,7 @@ export default function LandingPage() {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                         </span>
-                        3D Travel Animation
+                        {t("3D Travel Animation")}
                     </div>
 
                     <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50 pb-2">
@@ -101,8 +116,8 @@ export default function LandingPage() {
                     </h1>
 
                     <p className="text-xl md:text-2xl text-zinc-400 max-w-2xl mx-auto font-light leading-relaxed">
-                        Create cinematic travel route animations in seconds. <br className="hidden md:block" />
-                        Export high-quality videos for your content.
+                        {t("Create cinematic travel route animations in seconds.")} <br className="hidden md:block" />
+                        {t("Export high-quality videos for your content.")}
                     </p>
 
                     <button
@@ -110,11 +125,11 @@ export default function LandingPage() {
                         disabled={loading}
                         className="group relative inline-flex items-center gap-3 px-8 py-4 bg-white text-black text-lg font-bold rounded-full hover:bg-zinc-200 transition-all shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_-15px_rgba(255,255,255,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : "Create Map Animation"}
-                        <span className="group-hover:translate-x-1 transition-transform">→</span>
+                        {loading ? <Loader2 className="animate-spin" aria-hidden="true" /> : t("Create Map Animation")}
+                        <span className="group-hover:translate-x-1 transition-transform" aria-hidden="true">→</span>
                     </button>
 
-                    <p className="text-xs text-zinc-600 uppercase tracking-widest pt-8">Powered by Mapbox GL 3D</p>
+                    <p className="text-xs text-zinc-600 uppercase tracking-widest pt-8">{t("Powered by Mapbox GL 3D")}</p>
                 </div>
             </div>
 
@@ -122,8 +137,8 @@ export default function LandingPage() {
             {projects.length > 0 && (
                 <div className="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
                     <div className="flex items-center justify-between mb-8">
-                        <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-500">Your Previous Trips</h2>
-                        <span className="text-sm text-zinc-500">{projects.length} Projects</span>
+                        <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-500">{t("Your Previous Trips")}</h2>
+                        <span className="text-sm text-zinc-500">{projects.length} {t("Projects")}</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -136,27 +151,28 @@ export default function LandingPage() {
                                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                                 <div className="relative flex justify-between items-start mb-4">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xl">
+                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xl" aria-hidden="true">
                                         🌍
                                     </div>
                                     <button
                                         onClick={(e) => handleDeleteClick(e, p.id)}
                                         className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors z-10"
-                                        title="Delete Project"
+                                        title={t("Delete project")}
+                                        aria-label={`${t("Delete project")}: ${p.title || t("Untitled Trip")}`}
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={16} aria-hidden="true" />
                                     </button>
                                 </div>
 
                                 <div className="relative">
-                                    <h3 className="font-bold text-xl mb-1 text-zinc-100 group-hover:text-white transition-colors truncate">{p.title || "Untitled Trip"}</h3>
+                                    <h3 className="font-bold text-xl mb-1 text-zinc-100 group-hover:text-white transition-colors truncate">{p.title || t("Untitled Trip")}</h3>
                                     <p className="text-sm text-zinc-500">
-                                        Last updated: {new Date(p.updatedAt).toLocaleDateString()}
+                                        {t("Last updated:")} {new Date(p.updatedAt).toLocaleDateString(language === 'ko' ? 'ko-KR' : 'en-US')}
                                     </p>
                                 </div>
 
                                 <div className="mt-6 flex items-center text-sm font-medium text-blue-500 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
-                                    Open Editor <span className="ml-2">→</span>
+                                    {t("Open Editor")} <span className="ml-2" aria-hidden="true">→</span>
                                 </div>
                             </div>
                         ))}
@@ -170,11 +186,11 @@ export default function LandingPage() {
                     <div className="bg-zinc-900 border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full space-y-4 scale-100 animate-in zoom-in-95 duration-200">
                         <div className="space-y-2 text-center">
                             <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center text-red-500 mb-2">
-                                <Trash2 size={24} />
+                                <Trash2 size={24} aria-hidden="true" />
                             </div>
-                            <h3 className="text-xl font-bold text-white">Delete Project?</h3>
+                            <h3 className="text-xl font-bold text-white">{t("Delete Project?")}</h3>
                             <p className="text-zinc-400 text-sm">
-                                This action cannot be undone. This will permanently delete your travel route animation.
+                                {t("This action cannot be undone. This will permanently delete your travel route animation.")}
                             </p>
                         </div>
                         <div className="flex gap-3 pt-2">
@@ -182,13 +198,13 @@ export default function LandingPage() {
                                 onClick={() => setProjectToDelete(null)}
                                 className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-sm font-medium transition-colors"
                             >
-                                Cancel
+                                {t("Cancel")}
                             </button>
                             <button
                                 onClick={confirmDelete}
                                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors"
                             >
-                                Delete
+                                {t("Delete")}
                             </button>
                         </div>
                     </div>
@@ -198,9 +214,9 @@ export default function LandingPage() {
             {/* Footer */}
             <footer className="border-t border-white/5 py-12 text-center text-zinc-600 text-sm">
                 <div className="flex justify-center gap-6 mb-4">
-                    <a href="#" className="hover:text-zinc-400 transition-colors">Terms</a>
-                    <a href="#" className="hover:text-zinc-400 transition-colors">Privacy</a>
-                    <a href="#" className="hover:text-zinc-400 transition-colors">Contact</a>
+                    <a href="#" className="hover:text-zinc-400 transition-colors">{t("Terms")}</a>
+                    <a href="#" className="hover:text-zinc-400 transition-colors">{t("Privacy")}</a>
+                    <a href="#" className="hover:text-zinc-400 transition-colors">{t("Contact")}</a>
                 </div>
                 <p>&copy; 2024 TravelRoute Studio. All rights reserved.</p>
             </footer>

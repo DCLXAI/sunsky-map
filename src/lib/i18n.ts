@@ -71,6 +71,7 @@ export const translations: Record<string, Record<Language, string>> = {
 
     // Accessible names for icon-only controls
     "Toggle AI route assistant": { en: "Toggle AI route assistant", ko: "AI 경로 도우미 열고 닫기" },
+    "Toggle the editing panel": { en: "Toggle the editing panel", ko: "편집 패널 열고 닫기" },
     "Switch language": { en: "Switch language", ko: "언어 전환" },
     "Reorder this stop": { en: "Reorder this stop", ko: "이 경유지 순서 변경" },
     "Remove this stop": { en: "Remove this stop", ko: "이 경유지 삭제" },

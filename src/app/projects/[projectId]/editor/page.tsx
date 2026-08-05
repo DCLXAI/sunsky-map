@@ -180,12 +180,13 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
             {/* 2. Floating UI Layer */}
             <FloatingPanel />
 
-            {/* 3. Top Right Actions */}
-            <div className="absolute top-4 right-4 flex gap-3 z-20">
+            {/* 3. Top Right Actions. Labels collapse to icons on phones, so each
+                button carries its own accessible name. */}
+            <div className="absolute top-3 right-3 sm:top-4 sm:right-4 flex gap-2 sm:gap-3 z-30">
                 <button
                     onClick={() => setLanguage(language === 'en' ? 'ko' : 'en')}
                     aria-label={t("Switch language")}
-                    className="h-10 px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
+                    className="h-10 px-3 sm:px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
                 >
                     <span className="text-lg" aria-hidden="true">{language === "en" ? "🇰🇷" : "🇺🇸"}</span>
                     <span className="hidden sm:inline">{language === 'en' ? 'KO' : 'EN'}</span>
@@ -194,7 +195,8 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
                 <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="h-10 px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
+                    aria-label={t("Save")}
+                    className="h-10 px-3 sm:px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
                 >
                     {isSaving ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
                     <span className="hidden sm:inline">{t("Save")}</span>
@@ -203,7 +205,8 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
                 <button
                     onClick={() => setPlaying(!isPlaying)}
                     disabled={isExporting}
-                    className="h-10 px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
+                    aria-label={isPlaying ? t('Stop') : t('Preview')}
+                    className="h-10 px-3 sm:px-4 bg-white/90 backdrop-blur hover:bg-white rounded-xl shadow-lg border border-white/20 flex items-center gap-2 text-sm font-bold text-gray-700 transition-all hover:scale-105 active:scale-95"
                 >
                     {isPlaying ? <X size={16} aria-hidden="true" /> : <Play size={16} fill="currentColor" aria-hidden="true" />}
                     <span className="hidden sm:inline">{isPlaying ? t('Stop') : t('Preview')}</span>
@@ -212,10 +215,13 @@ export default function EditorPage({ params }: { params: Promise<{ projectId: st
                 <button
                     onClick={handleExport}
                     disabled={isExporting || waypoints.length < 2}
-                    className="h-10 pl-4 pr-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-xl shadow-blue-500/30 flex items-center gap-2 text-sm font-bold transition-all hover:scale-105 active:scale-95 hover:shadow-blue-500/50"
+                    aria-label={isExporting ? t('Recording...') : t('Export Video')}
+                    className="h-10 px-3 sm:pl-4 sm:pr-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-xl shadow-blue-500/30 flex items-center gap-2 text-sm font-bold transition-all hover:scale-105 active:scale-95 hover:shadow-blue-500/50 disabled:opacity-50"
                 >
-                    {isExporting ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-                    {isExporting ? t('Recording...') : t('Export Video')}
+                    {isExporting
+                        ? <Loader2 className="animate-spin" size={18} aria-hidden="true" />
+                        : <Download size={18} aria-hidden="true" />}
+                    <span className="hidden sm:inline">{isExporting ? t('Recording...') : t('Export Video')}</span>
                 </button>
             </div>
 

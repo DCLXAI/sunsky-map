@@ -40,6 +40,10 @@ export default function FloatingPanel() {
     const [isSearching, setIsSearching] = useState(false);
     const [showResults, setShowResults] = useState(false);
 
+    // Mobile bottom-sheet state. Ignored from `sm` up, where the panel is a
+    // fixed sidebar and the map has room beside it.
+    const [sheetOpen, setSheetOpen] = useState(false);
+
     // AI Generation State
     const [showAi, setShowAi] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
@@ -154,7 +158,29 @@ export default function FloatingPanel() {
     };
 
     return (
-        <div className="absolute top-4 left-4 w-96 max-h-[calc(100vh-2rem)] flex flex-col gap-4 z-20">
+        <div
+            className={`z-20 flex flex-col gap-3 sm:gap-4
+                fixed inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto px-3 pb-3 custom-scrollbar
+                transition-transform duration-300
+                ${sheetOpen ? 'translate-y-0' : 'translate-y-[calc(100%-3.25rem)]'}
+                sm:absolute sm:inset-auto sm:top-4 sm:left-4 sm:w-96 sm:max-h-[calc(100vh-2rem)]
+                sm:translate-y-0 sm:overflow-visible sm:px-0 sm:pb-0`}
+        >
+            {/* Mobile sheet handle. On phones the panel would otherwise cover
+                the map entirely, which is the thing being edited. */}
+            <button
+                type="button"
+                onClick={() => setSheetOpen((open) => !open)}
+                aria-expanded={sheetOpen}
+                aria-label={t("Toggle the editing panel")}
+                className="sm:hidden h-11 shrink-0 rounded-2xl bg-white/90 backdrop-blur-md shadow-2xl border border-white/20 flex items-center justify-center gap-2 text-sm font-bold text-gray-700"
+            >
+                {sheetOpen
+                    ? <ChevronDown size={18} aria-hidden="true" />
+                    : <ChevronUp size={18} aria-hidden="true" />}
+                {projectTitle || t("Trip Title...")}
+            </button>
+
 
             {/* 1. Project Title */}
             <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-white/20">
@@ -332,7 +358,9 @@ export default function FloatingPanel() {
             </div>
 
             {/* 4. Waypoint List */}
-            <div className="flex-1 overflow-y-auto rounded-2xl bg-white/80 backdrop-blur-md shadow-2xl border border-white/20 p-2 custom-scrollbar">
+            {/* The sheet itself scrolls on mobile, so this only takes over the
+                scrolling once it is a fixed-height sidebar. */}
+            <div className="sm:flex-1 sm:overflow-y-auto rounded-2xl bg-white/80 backdrop-blur-md shadow-2xl border border-white/20 p-2 custom-scrollbar">
                 <DragDropContext onDragEnd={onDragEnd}>
                     <Droppable droppableId="waypoints">
                         {(provided) => (

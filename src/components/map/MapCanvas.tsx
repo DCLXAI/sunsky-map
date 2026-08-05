@@ -6,8 +6,11 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 import type { Feature, FeatureCollection, LineString, Point, Position } from "geojson";
 import { useEditorStore } from "@/lib/store";
-import { getFlagEmoji, generateSmartRoute } from "@/lib/map-utils";
+import { getFlagEmoji, generateSmartRoute, routeCacheKey } from "@/lib/map-utils";
 import { buildPathData } from "@/lib/animation";
+
+/** Wait for edits to settle before paying for Directions API requests. */
+const ROUTE_DEBOUNCE_MS = 300;
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
@@ -284,8 +287,27 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
 
     const bakedEmojisRef = useRef(new Set<string>());
 
-    const lastWaypointsStringRef = useRef("");
-    const cachedPathRef = useRef<number[][]>([]);
+    // Only the coordinates and transport modes can move the line, so renaming a
+    // stop or changing its emoji must not trigger a fresh round of Directions
+    // API requests.
+    const routeKey = React.useMemo(() => routeCacheKey(waypoints), [waypoints]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        // Debounced so dragging a stop or editing coordinates settles before we
+        // pay for a route. Waypoints are read from the store when the timer
+        // fires rather than captured, so this effect stays keyed on routeKey.
+        const timer = setTimeout(async () => {
+            const path = await generateSmartRoute(useEditorStore.getState().waypoints);
+            if (!cancelled) setRoutePath(path);
+        }, ROUTE_DEBOUNCE_MS);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [routeKey]);
 
     const updateMapData = React.useCallback(async () => {
         if (!mapRefInternal.current || !isMapLoaded) return;
@@ -301,20 +323,9 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
             }
         });
 
-        // Generate Route (Cache Check)
-        const wpString = JSON.stringify(waypoints);
-        let path: number[][] = [];
-
-        if (wpString === lastWaypointsStringRef.current && cachedPathRef.current.length > 0) {
-            path = cachedPathRef.current;
-        } else {
-            path = await generateSmartRoute(waypoints);
-            lastWaypointsStringRef.current = wpString;
-            cachedPathRef.current = path;
-            setRoutePath(path);
-        }
-
-        const validPath = path.filter(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]));
+        // The route itself is produced by the debounced effect above; this
+        // function only renders whatever it last produced.
+        const validPath = routePath.filter(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]));
 
         // Sync Source Data
 
@@ -344,7 +355,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
             const bounds = validPath.reduce((b, c) => b.extend(c as [number, number]), new mapboxgl.LngLatBounds(validPath[0] as [number, number], validPath[0] as [number, number]));
             map.fitBounds(bounds, { padding: 100, pitch: 0, bearing: 0 });
         }
-    }, [waypoints, isPlaying, isMapLoaded]);
+    }, [waypoints, isPlaying, isMapLoaded, routePath]);
 
     const lastStyleRef = useRef(mapStyle);
 

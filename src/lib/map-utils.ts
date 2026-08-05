@@ -6,6 +6,16 @@ interface DirectionsResponse {
     routes?: { geometry: LineString }[];
 }
 
+/**
+ * Identifies a route by only the fields its geometry depends on.
+ *
+ * Renaming a stop or changing its emoji cannot move the line, so those must
+ * not invalidate the cache — otherwise every keystroke in a city name field
+ * re-requests every ground segment from the Directions API.
+ */
+export const routeCacheKey = (waypoints: Waypoint[]): string =>
+    waypoints.map((wp) => `${wp.lng},${wp.lat},${wp.transport}`).join('|');
+
 // Async Smart Route Generation (Directions API)
 export const generateSmartRoute = async (waypoints: Waypoint[]) => {
     if (waypoints.length < 2) return [];

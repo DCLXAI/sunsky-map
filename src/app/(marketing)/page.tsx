@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { Loader2, Trash2 } from "lucide-react";
 import { useEditorStore } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
+
+const MapCanvas = dynamic(() => import('@/components/map/MapCanvas'), { ssr: false });
 
 interface ProjectSummary {
     id: string;
@@ -47,6 +49,32 @@ export default function LandingPage() {
         }
     };
 
+    // Demo Scene Setup
+    useEffect(() => {
+        const store = useEditorStore.getState();
+        // Reset and set demo data with concise emojis (Flag + 1 Icon)
+        store.setWaypoints([
+            { id: 'demo-1', name: 'Incheon', lat: 37.4602, lng: 126.4407, transport: 'plane', emoji: '🇰🇷🛫' },
+            { id: 'demo-2', name: 'Paris', lat: 48.8566, lng: 2.3522, transport: 'plane', emoji: '🇫🇷🥖' },
+            { id: 'demo-3', name: 'New York', lat: 40.7128, lng: -74.0060, transport: 'plane', emoji: '🇺🇸🏙️' },
+            { id: 'demo-4', name: 'Tokyo', lat: 35.6762, lng: 139.6503, transport: 'plane', emoji: '🇯🇵🍣' },
+        ]);
+        store.setCameraView('follow');
+        const start = setTimeout(() => store.setPlaying(true), 1500);
+        return () => clearTimeout(start);
+    }, []);
+
+    // Auto-Loop (Replay on finish)
+    const isPlaying = useEditorStore(state => state.isPlaying);
+    useEffect(() => {
+        if (!isPlaying) {
+            const timer = setTimeout(() => {
+                useEditorStore.getState().setPlaying(true);
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isPlaying]);
+
     // Delete Confirmation State
     const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
@@ -70,19 +98,10 @@ export default function LandingPage() {
 
     return (
         <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-blue-500/30">
-            {/* Static Background Image (no live Mapbox map — avoids billing on every visit) */}
+            {/* Live Map Background */}
             <div className="fixed inset-0 z-0 pointer-events-none">
-                <Image
-                    src="/demo-poster.jpg"
-                    alt=""
-                    aria-hidden="true"
-                    fill
-                    priority
-                    sizes="100vw"
-                    className="object-cover hero-drift"
-                />
-                <div className="absolute inset-0 bg-black/75" />
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.85)_70%)]" />
+                <MapCanvas decorative />
+                <div className="absolute inset-0 bg-black/60" />
             </div>
 
             {/* Language toggle — the editor has one, so the landing page needs

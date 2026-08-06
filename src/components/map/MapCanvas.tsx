@@ -72,9 +72,11 @@ export interface MapCanvasHandle {
 interface MapCanvasProps {
     // React 19 types make refs nullable, so the handle must be too.
     mapRef?: React.RefObject<MapCanvasHandle | null>;
+    /** Background usage: stay silent when the map can't be shown. */
+    decorative?: boolean;
 }
 
-const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
+const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef, decorative = false }) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRefInternal = useRef<mapboxgl.Map | null>(null);
     const animationFrameRef = useRef<number | undefined>(undefined);
@@ -557,6 +559,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({ mapRef }) => {
     // mapbox-gl tears the page down if it is constructed without an access
     // token, so render a placeholder instead of a map we cannot build.
     if (!MAPBOX_TOKEN) {
+        if (decorative) return <div className="w-full h-full bg-zinc-950" />;
+
         return (
             <div className="w-full h-full bg-zinc-950 flex items-center justify-center p-8">
                 <div className="max-w-md text-center space-y-3">

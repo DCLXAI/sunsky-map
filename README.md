@@ -60,7 +60,7 @@ prisma/
 prisma.config.ts       Prisma 7 config (schema path, migrations path, migrate datasource)
 src/
   app/
-    (marketing)/       Landing page with a static poster background
+    (marketing)/       Landing page with a live map background looping the demo route
     projects/[projectId]/editor/  The editor
     api/projects/      CRUD for projects and their waypoints
     api/ai/generate/   Gemini route generation

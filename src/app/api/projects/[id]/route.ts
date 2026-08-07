@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOwnerId } from '@/lib/owner-server';
+import { LIMITS } from '@/lib/limits';
 
 // Every response here is scoped to the caller's bearer cookie. `private,
 // no-store` keeps that invisible to shared caches — route every return
@@ -29,6 +30,7 @@ interface ParsedWaypoint {
 /** Returns the sanitised waypoints, or null if the payload is malformed. */
 function parseWaypoints(input: unknown): ParsedWaypoint[] | null {
     if (!Array.isArray(input)) return null;
+    if (input.length > LIMITS.waypointsPerProject) return null;
 
     const parsed: ParsedWaypoint[] = [];
     for (const wp of input) {

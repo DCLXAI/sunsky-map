@@ -18,6 +18,18 @@ model Project {
   @@index([ownerId, updatedAt])
 }
 
+/// One row per accepted AI generation. Rate limiting counts these rather than
+/// keeping state in memory, because serverless instances do not share memory
+/// and a per-instance counter would let N instances allow N times the budget.
+model AiRequest {
+  id        String   @id @default(cuid())
+  ownerId   String
+  createdAt DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([createdAt])
+}
+
 model Waypoint {
   id        String   @id @default(cuid())
   projectId String

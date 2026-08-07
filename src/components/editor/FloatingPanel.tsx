@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEditorStore, type TransportMode, type Waypoint } from '@/lib/store';
 import { getFlagEmoji } from '@/lib/map-utils';
 import { useTranslation } from '@/lib/i18n';
+import { LIMITS } from '@/lib/limits';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { GripVertical, Trash2, Plane, Car, Train, Footprints, Search, Sparkles, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -230,6 +231,7 @@ export default function FloatingPanel() {
                             }}
                             placeholder={t("e.g. I want to travel from Seoul to Tokyo, then fly to Paris and finish in New York. (Press Enter)")}
                             aria-label={t("AI Route Assistant")}
+                            maxLength={LIMITS.promptMaxChars}
                             className="w-full text-sm p-3 bg-gray-50 rounded-xl border border-gray-100 focus:border-purple-300 focus:ring-2 ring-purple-100 outline-none resize-none h-24 placeholder-gray-400 text-gray-700"
                             autoFocus
                         />

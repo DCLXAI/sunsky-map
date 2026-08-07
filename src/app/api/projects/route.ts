@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOwnerId } from '@/lib/owner-server';
+import { LIMITS } from '@/lib/limits';
 
 // Every response here is scoped to the caller's bearer cookie. `private,
 // no-store` keeps that invisible to shared caches — route every return
@@ -34,6 +35,17 @@ export async function POST() {
     if (!ownerId) return json({ error: 'Missing owner' }, { status: 401 });
 
     try {
+        // Without a ceiling a script can create projects until the database
+        // fills. The cap is per visitor, so clearing cookies resets it — it
+        // slows accidental and casual abuse, not a determined attacker.
+        const existing = await prisma.project.count({ where: { ownerId } });
+        if (existing >= LIMITS.projectsPerOwner) {
+            return json(
+                { error: `You've reached the limit of ${LIMITS.projectsPerOwner} projects. Delete one to make room.` },
+                { status: 409 }
+            );
+        }
+
         const project = await prisma.project.create({
             data: {
                 ownerId,
